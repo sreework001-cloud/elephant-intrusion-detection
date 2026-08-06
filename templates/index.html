@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Elephant Intrusion Early Warning System - Field Monitoring Dashboard</title>
+    <link rel="stylesheet" href="/static/css/dashboard.css">
+</head>
+<body>
+
+    <!-- Main Container -->
+    <div class="container">
+        
+        <!-- Header -->
+        <header class="dashboard-header">
+            <div class="header-brand">
+                <div class="brand-icon">🐘</div>
+                <div class="brand-text">
+                    <h1>Elephant Intrusion Early Warning System</h1>
+                    <p>Multimodal IoT Network – Triangular TDOA Geophone Direction Mapping</p>
+                </div>
+            </div>
+
+            <div class="header-actions">
+                <div class="status-badge">
+                    <span class="status-dot" id="systemDot"></span>
+                    <span id="systemStatusText">SYSTEM ACTIVE</span>
+                </div>
+                <div class="status-badge" style="background: rgba(255,255,255,0.05); border-color: var(--border-glass);">
+                    📡 <span id="wsStatus">Connecting...</span>
+                </div>
+                <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NW')">
+                    ⚡ NW Entry (G1→G2)
+                </button>
+                <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NE')">
+                    ⚡ NE Entry (G1→G3)
+                </button>
+                <button class="btn btn-secondary" onclick="triggerSimulation('OUTBOUND')">
+                    🔄 Outbound Retreat
+                </button>
+                <button class="btn btn-secondary" onclick="clearSimulation()">
+                    🧹 Clear
+                </button>
+            </div>
+        </header>
+
+        <!-- Gateway & Architecture System Bar -->
+        <div class="arch-status-bar" style="display: flex; gap: 0.75rem; margin-bottom: 1.25rem; flex-wrap: wrap;">
+            <div class="arch-pill">
+                <span style="color: var(--text-muted);">LoRa SX1262 Link:</span> <strong style="color: var(--color-emerald);">10-15 km Active</strong>
+            </div>
+            <div class="arch-pill">
+                <span style="color: var(--text-muted);">TDOA Array Logic:</span> <strong style="color: var(--color-cyan);">Triangular Mapping OK</strong>
+            </div>
+            <div class="arch-pill">
+                <span style="color: var(--text-muted);">Backhaul:</span> <strong style="color: var(--color-emerald);">4G / GSM Online</strong>
+            </div>
+            <div class="arch-pill">
+                <span style="color: var(--text-muted);">Local Siren / Warning Light:</span> <strong id="sirenStatusText" style="color: var(--text-muted);">STANDBY</strong>
+            </div>
+            <div class="arch-pill">
+                <span style="color: var(--text-muted);">SD Card Backup:</span> <strong style="color: var(--color-emerald);">Logging OK</strong>
+            </div>
+        </div>
+
+        <!-- Dynamic Alert Banner -->
+        <div id="alertBanner" class="alert-banner normal">
+            <div class="alert-info">
+                <div class="alert-icon" id="alertIcon">🛡️</div>
+                <div>
+                    <div class="alert-title" id="alertTitle">ALL FIELD NODES SECURE</div>
+                    <div class="alert-desc" id="alertDesc">Continuous low-power TDOA monitoring active across 3 triangular geophone sensing nodes.</div>
+                </div>
+            </div>
+            <div style="text-align: right; display: flex; align-items: center; gap: 1rem;">
+                <div>
+                    <span style="font-size: 0.8rem; color: var(--text-muted);">FUSION THREAT SCORE</span>
+                    <div style="font-family: var(--font-heading); font-weight: 800; font-size: 1.4rem; color: var(--color-emerald);" id="threatScore">
+                        SAFE
+                    </div>
+                </div>
+                <button class="btn btn-stft" onclick="openSTFTModal('NODE_01', true)" style="display:none;" id="bannerStftBtn">
+                    📊 STFT Spectrogram
+                </button>
+            </div>
+        </div>
+
+        <!-- Grid 1: 3 Field Sensor Nodes in Triangular Array -->
+        <section class="grid-nodes">
+            
+            <!-- Node 1 (G1) -->
+            <div class="glass-card" id="card_NODE_01">
+                <div class="node-card-header">
+                    <div class="node-title">
+                        <h3>Node G1 (Apex)</h3>
+                        <div class="node-location">🌲 Deep Forest Trail (Apex)</div>
+                    </div>
+                    <span class="node-pill online" id="pill_NODE_01">ONLINE</span>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
+                        <span style="color: #EF4444;" id="vx_NODE_01">Vx: 0.18</span>
+                        <span style="color: #10B981;" id="vy_NODE_01">Vy: 0.15</span>
+                        <span style="color: #06B6D4;" id="vz_NODE_01">Vz: 0.22</span>
+                        <span style="color: #FFFFFF;" id="vmag_NODE_01">|V|: 0.32</span>
+                    </div>
+                </div>
+
+                <div class="node-metrics">
+                    <div class="metric-box">
+                        <div class="metric-label">TDOA Delay (ms)</div>
+                        <div class="metric-value" id="tdoa_NODE_01">0.0 <span style="font-size:0.75rem;">ms</span></div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Dom. Freq (f_dom)</div>
+                        <div class="metric-value" id="fdom_NODE_01">18.5 <span style="font-size:0.75rem;">Hz</span></div>
+                    </div>
+                </div>
+
+                <div class="sensor-meters">
+                    <div class="meter-row">
+                        <span style="color: var(--text-muted);">Battery (12V LiFePO4)</span>
+                        <span id="bat_text_NODE_01">95.4%</span>
+                    </div>
+                    <div class="progress-bg">
+                        <div class="progress-fill" id="bat_bar_NODE_01" style="width: 95%;"></div>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <span style="color: var(--text-muted);">LoRa RSSI / SNR</span>
+                        <span style="color: var(--color-cyan);" id="signal_NODE_01">-65 dBm / 11.2</span>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <div>
+                            <span class="badge-tag unverified" id="mic_badge_NODE_01">MIC: OFF</span>
+                            <span class="badge-tag unverified" id="pir_badge_NODE_01">PIR: OFF</span>
+                        </div>
+                        <button class="btn btn-stft" onclick="openSTFTModal('NODE_01')">📊 STFT</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Node 2 (G2) -->
+            <div class="glass-card" id="card_NODE_02">
+                <div class="node-card-header">
+                    <div class="node-title">
+                        <h3>Node G2 (Left Boundary)</h3>
+                        <div class="node-location">🌾 Agricultural Border Left</div>
+                    </div>
+                    <span class="node-pill online" id="pill_NODE_02">ONLINE</span>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
+                        <span style="color: #EF4444;" id="vx_NODE_02">Vx: 0.16</span>
+                        <span style="color: #10B981;" id="vy_NODE_02">Vy: 0.14</span>
+                        <span style="color: #06B6D4;" id="vz_NODE_02">Vz: 0.19</span>
+                        <span style="color: #FFFFFF;" id="vmag_NODE_02">|V|: 0.28</span>
+                    </div>
+                </div>
+
+                <div class="node-metrics">
+                    <div class="metric-box">
+                        <div class="metric-label">TDOA Delay (ms)</div>
+                        <div class="metric-value" id="tdoa_NODE_02">18.0 <span style="font-size:0.75rem;">ms</span></div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Dom. Freq (f_dom)</div>
+                        <div class="metric-value" id="fdom_NODE_02">19.2 <span style="font-size:0.75rem;">Hz</span></div>
+                    </div>
+                </div>
+
+                <div class="sensor-meters">
+                    <div class="meter-row">
+                        <span style="color: var(--text-muted);">Battery (12V LiFePO4)</span>
+                        <span id="bat_text_NODE_02">89.2%</span>
+                    </div>
+                    <div class="progress-bg">
+                        <div class="progress-fill" id="bat_bar_NODE_02" style="width: 89%;"></div>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <span style="color: var(--text-muted);">LoRa RSSI / SNR</span>
+                        <span style="color: var(--color-cyan);" id="signal_NODE_02">-72 dBm / 9.8</span>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <div>
+                            <span class="badge-tag unverified" id="mic_badge_NODE_02">MIC: OFF</span>
+                            <span class="badge-tag unverified" id="pir_badge_NODE_02">PIR: OFF</span>
+                        </div>
+                        <button class="btn btn-stft" onclick="openSTFTModal('NODE_02')">📊 STFT</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Node 3 (G3) -->
+            <div class="glass-card" id="card_NODE_03">
+                <div class="node-card-header">
+                    <div class="node-title">
+                        <h3>Node G3 (Right Boundary)</h3>
+                        <div class="node-location">🌾 Agricultural Border Right</div>
+                    </div>
+                    <span class="node-pill online" id="pill_NODE_03">ONLINE</span>
+                </div>
+
+                <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
+                        <span style="color: #EF4444;" id="vx_NODE_03">Vx: 0.12</span>
+                        <span style="color: #10B981;" id="vy_NODE_03">Vy: 0.11</span>
+                        <span style="color: #06B6D4;" id="vz_NODE_03">Vz: 0.15</span>
+                        <span style="color: #FFFFFF;" id="vmag_NODE_03">|V|: 0.22</span>
+                    </div>
+                </div>
+
+                <div class="node-metrics">
+                    <div class="metric-box">
+                        <div class="metric-label">TDOA Delay (ms)</div>
+                        <div class="metric-value" id="tdoa_NODE_03">42.0 <span style="font-size:0.75rem;">ms</span></div>
+                    </div>
+                    <div class="metric-box">
+                        <div class="metric-label">Dom. Freq (f_dom)</div>
+                        <div class="metric-value" id="fdom_NODE_03">21.0 <span style="font-size:0.75rem;">Hz</span></div>
+                    </div>
+                </div>
+
+                <div class="sensor-meters">
+                    <div class="meter-row">
+                        <span style="color: var(--text-muted);">Battery (12V LiFePO4)</span>
+                        <span id="bat_text_NODE_03">92.1%</span>
+                    </div>
+                    <div class="progress-bg">
+                        <div class="progress-fill" id="bat_bar_NODE_03" style="width: 92%;"></div>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <span style="color: var(--text-muted);">LoRa RSSI / SNR</span>
+                        <span style="color: var(--color-cyan);" id="signal_NODE_03">-68 dBm / 10.5</span>
+                    </div>
+                    <div class="meter-row" style="margin-top: 0.4rem;">
+                        <div>
+                            <span class="badge-tag unverified" id="mic_badge_NODE_03">MIC: OFF</span>
+                            <span class="badge-tag unverified" id="pir_badge_NODE_03">PIR: OFF</span>
+                        </div>
+                        <button class="btn btn-stft" onclick="openSTFTModal('NODE_03')">📊 STFT</button>
+                    </div>
+                </div>
+            </div>
+
+        </section>
+
+        <!-- Grid 2: Waveform & Triangular Map Radar -->
+        <section class="grid-charts">
+            
+            <!-- Real-time Waveform Canvas -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <div>
+                        <h2>Triaxial Geophone Waveform (mm/s)</h2>
+                        <span style="font-size: 0.78rem; color: var(--text-muted);">Live X (E-W), Y (N-S), Z (Vertical) Ground Motion Stream</span>
+                    </div>
+                    <div style="display: flex; gap: 0.4rem;">
+                        <button class="axis-btn active" id="axisBtn_ALL" onclick="setAxisMode('ALL')">All Axes</button>
+                        <button class="axis-btn" id="axisBtn_X" onclick="setAxisMode('X')" style="border-color:#EF4444; color:#EF4444;">X-Axis</button>
+                        <button class="axis-btn" id="axisBtn_Y" onclick="setAxisMode('Y')" style="border-color:#10B981; color:#10B981;">Y-Axis</button>
+                        <button class="axis-btn" id="axisBtn_Z" onclick="setAxisMode('Z')" style="border-color:#06B6D4; color:#06B6D4;">Z-Axis</button>
+                    </div>
+                </div>
+                <canvas id="vibrationCanvas"></canvas>
+            </div>
+
+            <!-- Triangular Compass TDOA Map -->
+            <div class="glass-card">
+                <div class="card-header">
+                    <h2>Triangular TDOA Compass Map</h2>
+                </div>
+                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; height: 250px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); padding: 1rem;">
+                    
+                    <!-- Forest Title Top -->
+                    <div style="position: absolute; top: 10px; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
+                        🌲 Deep Forest Area (NORTH)
+                    </div>
+                    
+                    <!-- Triangle Node 1 (Apex Top) -->
+                    <div class="trail-node" id="trail_NODE_01" onclick="openSTFTModal('NODE_01')" style="position: absolute; top: 35px;">
+                        <div class="node-icon-circle" id="circle_NODE_01">G1</div>
+                        <span style="font-size:0.75rem; font-weight:700;">G1 (Apex)</span>
+                    </div>
+
+                    <!-- Triangular Layout Dashed Lines -->
+                    <svg width="220" height="150" style="position: absolute; top: 40px; pointer-events: none;">
+                        <line x1="110" y1="20" x2="35" y2="120" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" stroke-dasharray="4" />
+                        <line x1="110" y1="20" x2="185" y2="120" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" stroke-dasharray="4" />
+                        <line x1="35" y1="120" x2="185" y2="120" stroke="rgba(6, 182, 212, 0.4)" stroke-width="2" stroke-dasharray="4" />
+                    </svg>
+
+                    <!-- Triangle Node 2 (Bottom Left) -->
+                    <div class="trail-node" id="trail_NODE_02" onclick="openSTFTModal('NODE_02')" style="position: absolute; bottom: 35px; left: 15px;">
+                        <div class="node-icon-circle" id="circle_NODE_02">G2</div>
+                        <span style="font-size:0.75rem; font-weight:700;">G2 (Left)</span>
+                    </div>
+
+                    <!-- Triangle Node 3 (Bottom Right) -->
+                    <div class="trail-node" id="trail_NODE_03" onclick="openSTFTModal('NODE_03')" style="position: absolute; bottom: 35px; right: 15px;">
+                        <div class="node-icon-circle" id="circle_NODE_03">G3</div>
+                        <span style="font-size:0.75rem; font-weight:700;">G3 (Right)</span>
+                    </div>
+
+                    <!-- Agricultural Land Bottom -->
+                    <div style="position: absolute; bottom: 8px; font-size: 0.72rem; color: var(--color-emerald); font-weight: 700;">
+                        ======================================<br>
+                        🌾 Forest Boundary / Agricultural Land
+                    </div>
+                </div>
+
+                <!-- TDOA Estimated Vector Summary Box -->
+                <div style="margin-top: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; border: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem;">
+                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.2rem;">
+                        <span style="color: var(--text-muted);">Estimated Direction:</span>
+                        <strong style="color: var(--color-cyan);" id="tdoaVectorText">⬅ North-West Approach</strong>
+                    </div>
+                    <div style="display: flex; justify-content: space-between;">
+                        <span style="color: var(--text-muted);">Nearest Node:</span>
+                        <strong style="color: white;" id="nearestNodeText">G1 (0.0 ms)</strong>
+                    </div>
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- Grid 3: Historical Intrusion Log Table -->
+        <section class="glass-card">
+            <div class="card-header">
+                <h2>Intrusion Alerts & Fusion Log History</h2>
+                <span style="font-size: 0.8rem; color: var(--text-muted);">💡 Click any detection event row to open STFT Spectrogram</span>
+            </div>
+            <div class="table-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Trigger Sequence</th>
+                            <th>Estimated Direction Mapping</th>
+                            <th>Threat Level</th>
+                            <th>Confidence</th>
+                            <th>Verification</th>
+                            <th>Details</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsTableBody">
+                        <tr>
+                            <td colspan="7" style="text-align: center; color: var(--text-muted);">Loading alert records...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+
+    </div>
+
+    <!-- STFT Spectrogram Analysis Modal -->
+    <div class="modal-overlay" id="stftModal">
+        <div class="modal-container">
+            <div class="modal-header">
+                <div class="modal-title-box">
+                    <h2>📊 STFT Spectrogram Frequency Analysis</h2>
+                    <span class="node-pill online" id="stftNodePill">NODE_01</span>
+                </div>
+                <button class="close-btn" onclick="closeSTFTModal()">✕</button>
+            </div>
+
+            <!-- Metrics Summary Row -->
+            <div class="stft-metrics-row">
+                <div class="stft-metric-card">
+                    <div class="label">Peak Frequency (f_dom)</div>
+                    <div class="val" id="stftPeakFreq">18.5 Hz</div>
+                </div>
+                <div class="stft-metric-card">
+                    <div class="label">Spectral Peak Energy</div>
+                    <div class="val" id="stftPeakEnergy">-24.2 dB</div>
+                </div>
+                <div class="stft-metric-card">
+                    <div class="label">Seismic Bandwidth</div>
+                    <div class="val" id="stftBandwidth">12.5 Hz</div>
+                </div>
+                <div class="stft-metric-card">
+                    <div class="label">Signal Classification</div>
+                    <div class="val" style="color: var(--color-emerald); font-size: 0.95rem;" id="stftClass">
+                        Elephant Infrasound
+                    </div>
+                </div>
+            </div>
+
+            <!-- Axis Selector inside STFT Modal -->
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);">STFT Axis:</span>
+                <button class="axis-btn active" onclick="fetchAndRenderSTFT()">Composite Vector |V|</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#EF4444; color:#EF4444;">X-Axis (E-W)</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#10B981; color:#10B981;">Y-Axis (N-S)</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#06B6D4; color:#06B6D4;">Z-Axis (Vertical)</button>
+            </div>
+
+            <!-- Spectrogram Canvas & Heatmap Colorbar -->
+            <div class="stft-canvas-wrapper">
+                <div style="position: absolute; left: 18px; top: 12px; font-size: 0.7rem; color: var(--text-muted);">Frequency (Hz) ↑</div>
+                <canvas id="stftCanvas"></canvas>
+                <div class="colorbar-container">
+                    <span>0.0 dB</span>
+                    <div class="colorbar-gradient"></div>
+                    <span>-60 dB</span>
+                </div>
+            </div>
+            <div style="display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); margin-top: -0.5rem; padding: 0 1.5rem;">
+                <span>Time: 0.0s</span>
+                <span>1.0s</span>
+                <span>2.0s</span>
+                <span>3.0s</span>
+                <span>4.0s</span>
+                <span>5.0s (Window End)</span>
+            </div>
+
+            <div style="display: flex; justify-content: space-between; align-items: center; border-top: 1px solid var(--border-glass); pt: 0.75rem; margin-top: 0.5rem;">
+                <span style="font-size: 0.8rem; color: var(--text-muted);" id="stftFootnote">
+                    * STFT calculated over 5.0s window using 50 time slices & 40 frequency bins (0–50 Hz).
+                </span>
+                <button class="btn btn-secondary" onclick="refreshSTFTData()">
+                    🔄 Refresh STFT
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="/static/js/app.js"></script>
+</body>
+</html>
