@@ -66,7 +66,78 @@ Hey! The ESP32 firmware has been updated to meet your exact **Dual-Path Data Flo
 
 ---
 
-## 📦 3. MQTT Packet JSON Format (Sent at 1 Hz)
+## 📖 3. Complete Step-by-Step ESP32 Setup & Flashing Guide
+
+### **A. Does the ESP32 "ask" for anything on screen?**
+**NO.** The ESP32 does not have a pop-up window or keyboard to ask questions while running.  
+
+Instead, it reads the **Wi-Fi Name and Password that you type into the code BEFORE uploading**. As soon as you give it power (via USB cable or battery), it runs automatically on its own!
+
+---
+
+### **B. How the Wi-Fi Connection Works**
+
+Before uploading the code, open [`esp32_geophone.ino`](https://github.com/sreework001-cloud/elephant-intrusion-detection/blob/main/esp32_firmware/esp32_geophone/esp32_geophone.ino) in Arduino IDE and change **lines 21 & 22**:
+
+```cpp
+// Lines 21 & 22 in esp32_geophone.ino:
+const char* ssid = "My_Home_WiFi";       // <-- Replace with your Wi-Fi or Mobile Hotspot Name
+const char* password = "My_Password123";  // <-- Replace with your Wi-Fi Password
+```
+
+💡 **Tip (Mobile Hotspot)**: You can also type your **Mobile Phone Hotspot Name & Password**! Turn on your phone's hotspot, and the ESP32 will connect to your phone automatically.
+
+---
+
+### **C. What You Should Do Step-by-Step**
+
+#### **Step 1: Plug in the ESP32**
+1. Connect the ESP32 to your computer/laptop using a **USB Micro-USB cable**.
+
+#### **Step 2: Open Arduino IDE**
+1. Double-click `esp32_geophone.ino`.
+2. Go to **Tools $\rightarrow$ Board** $\rightarrow$ select **ESP32 Dev Module**.
+3. Go to **Tools $\rightarrow$ Port** $\rightarrow$ select your ESP32 COM port (e.g. `COM3` or `COM4`).
+
+#### **Step 3: Upload the Code**
+1. Click the **Upload** button (➡️ top left right arrow button).
+2. Arduino IDE will compile the code and flash it to the ESP32 board.
+
+---
+
+### **D. How to See What the ESP32 is Doing Live (Serial Monitor)**
+
+After uploading, you can watch the ESP32 start up and connect to Wi-Fi live on your computer screen:
+
+1. In Arduino IDE, click **Tools $\rightarrow$ Serial Monitor** (or press `Ctrl` + `Shift` + `M`).
+2. Set the speed in the bottom right corner to **`115200 baud`**.
+
+You will see this printout live:
+```text
+==========================================================
+🐘 ELEPHANT INTRUSION WARNING SYSTEM - ESP32 FIRMWARE 🐘
+==========================================================
+[RTC] Initializing I2C DS3231 Real-Time Clock... [OK]
+[RTC] Current Date/Time: 2026-08-08 18:47:59
+[SD Card] Initializing SPI SD Card (CS Pin 5)... [OK]
+[SD Card] Target Log File: /geophone_log.csv
+[Wi-Fi] Connecting to My_Home_WiFi... [CONNECTED]
+[Wi-Fi] ESP32 IP Address: 192.168.1.105
+----------------------------------------------------------
+Target Sensor Sampling Rate : 200 Hz (5000 µs interval)
+SD Card Logging Rate        : 200 Hz (every sample)
+MQTT Telemetry Rate         : 1 Hz (aggregated summary)
+==========================================================
+
+Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:48:00
+Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:48:01
+```
+
+As soon as you see `[Wi-Fi] [CONNECTED]`, check your live website (`https://elephant-intrusion-detection.onrender.com/`), and `NODE_01` will immediately show **`⚡ ESP32 HARDWARE`** with your live geophone readings!
+
+---
+
+## 📦 4. MQTT Packet JSON Format (Sent at 1 Hz)
 
 ```json
 {
@@ -89,7 +160,7 @@ Hey! The ESP32 firmware has been updated to meet your exact **Dual-Path Data Flo
 
 ---
 
-## ❓ 4. Frequently Asked Questions (FAQ) & Troubleshooting
+## ❓ 5. Frequently Asked Questions (FAQ) & Troubleshooting
 
 ### **Q1: Does the ESP32 ask for any inputs or prompts on screen when running?**
 **No.** Microcontrollers execute code automatically on power-up. You must enter your Wi-Fi Name & Password in lines 21–22 of `esp32_geophone.ino` **before uploading** to the ESP32.
@@ -105,10 +176,7 @@ When powered on, the ESP32 automatically connects to this network and starts str
 ### **Q3: How do I view live diagnostic logs from the ESP32?**
 1. Connect ESP32 to your computer via USB.
 2. Open **Arduino IDE** $\rightarrow$ click **Tools $\rightarrow$ Serial Monitor** (`Ctrl + Shift + M`).
-3. Set speed to **`115200 baud`**. You will see live 1 Hz diagnostic summaries:
-   ```text
-   Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:48:50 | Total Samples: 1200
-   ```
+3. Set speed to **`115200 baud`**. You will see live 1 Hz diagnostic summaries.
 
 ### **Q4: What happens if Wi-Fi, MQTT, or SD Card fails?**
 The system is built for **fault tolerance**:
