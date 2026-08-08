@@ -89,28 +89,28 @@ Hey! The ESP32 firmware has been updated to meet your exact **Dual-Path Data Flo
 
 ---
 
-## 🧪 4. Serial Monitor Operational Output
+## ❓ 4. Frequently Asked Questions (FAQ) & Troubleshooting
 
-During startup, the ESP32 prints system diagnostics:
-```text
-==========================================================
-🐘 ELEPHANT INTRUSION WARNING SYSTEM - ESP32 FIRMWARE 🐘
-==========================================================
-[RTC] Initializing I2C DS3231 Real-Time Clock... [OK]
-[RTC] Current Date/Time: 2026-08-08 18:35:00
-[SD Card] Initializing SPI SD Card (CS Pin 5)... [OK]
-[SD Card] Target Log File: /geophone_log.csv
-[Wi-Fi] Connecting to YOUR_WIFI_SSID... [CONNECTED]
-[Wi-Fi] ESP32 IP Address: 192.168.1.105
-----------------------------------------------------------
-Target Sensor Sampling Rate : 200 Hz (5000 µs interval)
-SD Card Logging Rate        : 200 Hz (every sample)
-MQTT Telemetry Rate         : 1 Hz (aggregated summary)
-==========================================================
-```
+### **Q1: Does the ESP32 ask for any inputs or prompts on screen when running?**
+**No.** Microcontrollers execute code automatically on power-up. You must enter your Wi-Fi Name & Password in lines 21–22 of `esp32_geophone.ino` **before uploading** to the ESP32.
 
-During operation, it prints a 1 Hz summary line:
-```text
-Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:35:01 | Total Samples: 200
-Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:35:02 | Total Samples: 400
+### **Q2: How does the Wi-Fi connection work & can I use a Mobile Hotspot?**
+**Yes.** Change lines 21–22 in `esp32_geophone.ino`:
+```cpp
+const char* ssid = "My_Mobile_Hotspot";   // <-- Wi-Fi / Hotspot Name
+const char* password = "My_Password123";  // <-- Password
 ```
+When powered on, the ESP32 automatically connects to this network and starts streaming data over MQTT.
+
+### **Q3: How do I view live diagnostic logs from the ESP32?**
+1. Connect ESP32 to your computer via USB.
+2. Open **Arduino IDE** $\rightarrow$ click **Tools $\rightarrow$ Serial Monitor** (`Ctrl + Shift + M`).
+3. Set speed to **`115200 baud`**. You will see live 1 Hz diagnostic summaries:
+   ```text
+   Samples: 200 Hz | SD: OK | MQTT: OK | RTC: 2026-08-08 18:48:50 | Total Samples: 1200
+   ```
+
+### **Q4: What happens if Wi-Fi, MQTT, or SD Card fails?**
+The system is built for **fault tolerance**:
+* If SD card write fails $\rightarrow$ sensor sampling at 200 Hz and MQTT stream continue.
+* If Wi-Fi drops $\rightarrow$ 200 Hz sensor acquisition and SD CSV logging continue without stopping. Non-blocking MQTT reconnect attempts run in the background until Wi-Fi returns.
