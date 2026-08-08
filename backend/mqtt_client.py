@@ -20,7 +20,6 @@ class MQTTGatewayHandler:
         self.broadcast_callback: Optional[Callable] = None
         self.is_connected = False
         
-        # Track active hardware nodes and their last-seen timestamp
         self.hardware_active_nodes: Dict[str, float] = {}
 
         self.client.on_connect = self._on_connect
@@ -31,9 +30,6 @@ class MQTTGatewayHandler:
         self.broadcast_callback = callback
 
     def is_hardware_active(self, node_id: str, timeout_seconds: float = 30.0) -> bool:
-        """
-        Returns True if real physical ESP32 hardware sent telemetry for node_id recently.
-        """
         last_seen = self.hardware_active_nodes.get(node_id, 0.0)
         return (time.time() - last_seen) < timeout_seconds
 
@@ -68,7 +64,6 @@ class MQTTGatewayHandler:
         try:
             payload_str = msg.payload.decode("utf-8")
             data = json.loads(payload_str)
-            # Mark as hardware packet if received via MQTT from external ESP32 or explicitly flagged
             data["is_hardware"] = True
             self.process_node_packet(data)
         except Exception as e:
@@ -76,14 +71,16 @@ class MQTTGatewayHandler:
 
     def process_node_packet(self, data: dict):
         """
-        Processes node payload from Gateway, ESP32 hardware, or Simulator.
+        Processes node payload according to dual-path ESP32 hardware & simulator spec.
+        Extracts RTC Timestamp, Triaxial Geophone (X, Y, Z), and Edge Features.
         """
         node_id = data.get("node_id", "NODE_01")
         is_hardware = bool(data.get("is_hardware", False))
+        rtc_timestamp = data.get("rtc_timestamp", None)
         
         if is_hardware:
             self.hardware_active_nodes[node_id] = time.time()
-            logger.info(f"⚡ Real ESP32 Hardware packet received for {node_id}")
+            logger.info(f"⚡ Real ESP32 Hardware packet received for {node_id} (RTC: {rtc_timestamp})")
 
         # Triaxial Geophone Inputs (X, Y, Z)
         if "vib_x" in data and "vib_y" in data and "vib_z" in data:
@@ -97,7 +94,7 @@ class MQTTGatewayHandler:
             vib_y = round(vibration_val * 0.52, 2)
             vib_z = round(vibration_val * 0.63, 2)
 
-        # Edge Features (Actual or Temporary fallback for phase 1 hardware testing)
+        # Edge Features
         f_dom = float(data.get("f_dom", 18.5 if vibration_val > 2.0 else 3.2))
         rms = float(data.get("rms", round(vibration_val * 0.707, 2)))
         kurtosis = float(data.get("kurtosis", 5.8 if vibration_val > 4.0 else 2.8))
@@ -124,6 +121,7 @@ class MQTTGatewayHandler:
             eval_result = fusion_engine.register_node_trigger(node_id, vibration_val, mic_verified, confidence)
             if eval_result:
                 siren_activated = (eval_result["threat_level"] == "CRITICAL")
+                alert_details = f"RTC: {rtc_timestamp}. {eval_result['details']}" if rtc_timestamp else eval_result['details']
                 alert_id = log_alert(
                     trigger_nodes=eval_result["trigger_nodes"],
                     direction=eval_result["direction"],
@@ -132,7 +130,7 @@ class MQTTGatewayHandler:
                     mic_verified=eval_result["mic_verified"],
                     pir_verified=pir_active,
                     siren_activated=siren_activated,
-                    details=f"{'ESP32 Live Hardware Alert' if is_hardware else 'Simulation Alert'}. {eval_result['details']}"
+                    details=alert_details
                 )
                 eval_result["alert_id"] = alert_id
                 eval_result["siren_activated"] = siren_activated
@@ -145,6 +143,7 @@ class MQTTGatewayHandler:
                 "data": {
                     "node_id": node_id,
                     "is_hardware": is_hardware,
+                    "rtc_timestamp": rtc_timestamp,
                     "vib_x": vib_x,
                     "vib_y": vib_y,
                     "vib_z": vib_z,
