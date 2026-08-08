@@ -44,6 +44,7 @@ const int SD_CS_PIN = 5;
 // --- 3. Sampling & Timing Parameters ---
 const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz = 1 sample every 5000 µs (5ms)
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000; // 1 Hz summary telemetry packet
+const unsigned long MQTT_RETRY_INTERVAL_MS = 5000; // Non-blocking 5s retry for MQTT
 
 // --- 4. Uncalibrated ADC & Sensitivity Scale Placeholders ---
 const int ADC_BASELINE = 2048; // 12-bit ADC midpoint (3.3V / 2)
@@ -67,10 +68,10 @@ unsigned long samplesThisSecond = 0;
 
 unsigned long lastSampleMicros = 0;
 unsigned long lastMqttPublishMs = 0;
+unsigned long lastMqttRetryMs = 0;
 unsigned long lastSerialPrintMs = 0;
 
 // Peak / Aggregated window variables for 1Hz MQTT packet
-int maxRawX = 0, maxRawY = 0, maxRawZ = 0;
 float peakVibX = 0.0, peakVibY = 0.0, peakVibZ = 0.0;
 double sumVmagSquared = 0.0;
 
@@ -89,39 +90,43 @@ String getRTCTimestamp() {
 
 void setupWiFi() {
   Serial.print("[Wi-Fi] Connecting to ");
-  Serial.print(ssid);
+  Serial.println(ssid);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
-
-  unsigned long startAttempt = millis();
-  while (WiFi.status() != WL_CONNECTED && millis() - startAttempt < 8000) {
-    delay(400);
-    Serial.print(".");
-  }
-
-  if (WiFi.status() == WL_CONNECTED) {
-    Serial.println(" [CONNECTED]");
-    Serial.print("[Wi-Fi] ESP32 IP Address: ");
-    Serial.println(WiFi.localIP());
-  } else {
-    Serial.println(" [OFFLINE - Non-blocking mode active]");
-  }
 }
 
-void reconnectMQTT() {
-  if (WiFi.status() != WL_CONNECTED) return;
+// 100% NON-BLOCKING MQTT Reconnect (No delay() to ensure 200 Hz sampling is never interrupted)
+void reconnectMQTTNonBlocking() {
+  if (WiFi.status() != WL_CONNECTED) {
+    mqttOK = false;
+    return;
+  }
 
-  if (!client.connected()) {
+  if (client.connected()) {
+    mqttOK = true;
+    return;
+  }
+
+  unsigned long nowMs = millis();
+  if (nowMs - lastMqttRetryMs >= MQTT_RETRY_INTERVAL_MS) {
+    lastMqttRetryMs = nowMs;
+    
+    Serial.print("[MQTT] Attempting non-blocking connection to ");
+    Serial.print(mqtt_server);
+    Serial.print("... ");
+
     String clientId = "ESP32_Geophone_Node01_";
     clientId += String(random(0xffff), HEX);
     
     if (client.connect(clientId.c_str())) {
       mqttOK = true;
+      Serial.println("[CONNECTED]");
     } else {
       mqttOK = false;
+      Serial.print("[FAILED, rc=");
+      Serial.print(client.state());
+      Serial.println(" - Will retry in background]");
     }
-  } else {
-    mqttOK = true;
   }
 }
 
@@ -136,7 +141,6 @@ void initSDCard() {
     Serial.print("[SD Card] Target Log File: ");
     Serial.println(logFilename);
 
-    // Create CSV header if file doesn't exist
     if (!SD.exists(logFilename)) {
       logFile = SD.open(logFilename, FILE_WRITE);
       if (logFile) {
@@ -191,7 +195,6 @@ void setup() {
 
   // 3. Configure MQTT
   client.setServer(mqtt_server, mqtt_port);
-  reconnectMQTT();
 
   Serial.println("----------------------------------------------------------");
   Serial.println("Target Sensor Sampling Rate : 200 Hz (5000 µs interval)");
@@ -253,12 +256,14 @@ void loop() {
   // --- PATH 2: 1 Hz Aggregated Telemetry via MQTT to Dashboard ---
   unsigned long currentMs = millis();
 
-  // Keep MQTT connection alive (non-blocking)
+  // Keep Wi-Fi & MQTT connections active without blocking loop
   if (WiFi.status() == WL_CONNECTED) {
-    if (!client.connected()) {
-      reconnectMQTT();
+    reconnectMQTTNonBlocking();
+    if (client.connected()) {
+      client.loop();
     }
-    client.loop();
+  } else {
+    mqttOK = false;
   }
 
   if (currentMs - lastMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
