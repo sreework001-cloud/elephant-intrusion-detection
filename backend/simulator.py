@@ -32,6 +32,11 @@ class NodeSimulator:
         while self.is_running:
             try:
                 for node_id in self.nodes:
+                    # CRITICAL: If physical hardware (ESP32) is actively sending telemetry for node_id, SKIP simulator overwrite!
+                    if mqtt_gateway.is_hardware_active(node_id):
+                        # Do not overwrite live ESP32 hardware telemetry for this node
+                        continue
+
                     # Triaxial Ambient noise (Horizontal X, Horizontal Y, Vertical Z in mm/s)
                     vx = round(random.uniform(0.08, 0.35), 2)
                     vy = round(random.uniform(0.06, 0.30), 2)
@@ -42,6 +47,7 @@ class NodeSimulator:
                     
                     packet = {
                         "node_id": node_id,
+                        "is_hardware": False,
                         "vib_x": vx,
                         "vib_y": vy,
                         "vib_z": vz,
@@ -73,22 +79,23 @@ class NodeSimulator:
         TDOA Delays are simulated in milliseconds.
         """
         if sequence_type == "INBOUND_NW":
-            # G1 (0ms) -> G2 (18ms) -> G3 (42ms) (Approach from North-West)
             seq = [("NODE_01", 3.8, 3.2, 4.9, 18.5, 94), ("NODE_02", 4.2, 3.6, 5.4, 19.2, 96), ("NODE_03", 3.5, 3.0, 4.2, 17.8, 90)]
         elif sequence_type == "INBOUND_NE":
-            # G1 (0ms) -> G3 (15ms) -> G2 (38ms) (Approach from North-East)
             seq = [("NODE_01", 4.0, 3.4, 5.1, 18.8, 94), ("NODE_03", 4.5, 3.9, 5.8, 20.1, 97), ("NODE_02", 3.4, 2.9, 4.1, 17.5, 89)]
         elif sequence_type == "OUTBOUND":
-            # G2 (0ms) -> G3 (16ms) -> G1 (35ms) (Outbound Retreat back to forest)
             seq = [("NODE_02", 3.8, 3.2, 4.6, 19.0, 88), ("NODE_03", 3.6, 3.1, 4.3, 18.5, 86), ("NODE_01", 3.1, 2.6, 3.8, 18.0, 92)]
         else:
-            # Direct South Incursion: G2 & G3 (0-12ms) -> G1 (45ms)
             seq = [("NODE_02", 4.5, 4.0, 5.8, 21.0, 98), ("NODE_03", 4.3, 3.8, 5.5, 20.5, 96), ("NODE_01", 3.2, 2.7, 4.0, 18.0, 91)]
 
         for node_id, vx, vy, vz, fdom, conf in seq:
+            # If node_id is receiving live ESP32 hardware data, don't inject simulated sequence into that specific node
+            if mqtt_gateway.is_hardware_active(node_id):
+                continue
+
             total_vib = round((vx**2 + vy**2 + vz**2)**0.5, 2)
             packet = {
                 "node_id": node_id,
+                "is_hardware": False,
                 "vib_x": vx,
                 "vib_y": vy,
                 "vib_z": vz,
@@ -106,7 +113,7 @@ class NodeSimulator:
                 "status": "ALERT"
             }
             mqtt_gateway.process_node_packet(packet)
-            await asyncio.sleep(2.5) # Time step between node arrival
+            await asyncio.sleep(2.5)
 
 # Global Singleton
 simulator = NodeSimulator()
