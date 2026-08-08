@@ -40,19 +40,19 @@ Open **Arduino IDE** on your computer and install these libraries via **Tools $\
 1. `PubSubClient` (by Nick O'Leary) - for MQTT.
 2. `ArduinoJson` (by Benoit Blanchon) - for formatting JSON payloads.
 
-### Step 3: Hardware Pin Connections
+### Step 3: Hardware Pin Connections (Updated GPIO Mapping)
 Connect your Signal Conditioning / ADC board output pins to your ESP32-WROOM-32D:
 
 | Geophone Signal Line | ESP32-WROOM-32D Pin | Pin Function |
 | :--- | :--- | :--- |
-| **Geophone X (Horizontal E-W)** | **Pin 36 (`VP`)** | ADC1 Channel 0 |
-| **Geophone Y (Horizontal N-S)** | **Pin 39 (`VN`)** | ADC1 Channel 3 |
-| **Geophone Z (Vertical Ground)** | **Pin 34** | ADC1 Channel 6 |
+| **Geophone X (Horizontal E-W)** | **GPIO 33** | ADC1 Channel 5 |
+| **Geophone Y (Horizontal N-S)** | **GPIO 35** | ADC1 Channel 7 |
+| **Geophone Z (Vertical Ground)** | **GPIO 34** | ADC1 Channel 6 |
 | **GND** | **GND** | Common Ground |
 | **VCC (3.3V / 5V)** | **3.3V / VIN** | Power |
 
 ### Step 4: Configure Wi-Fi & Upload
-1. Edit lines 16 & 17 in `esp32_geophone.ino` with **your Wi-Fi network name and password**:
+1. Edit lines 21 & 22 in `esp32_geophone.ino` with **your Wi-Fi network name and password**:
    ```cpp
    const char* ssid = "YOUR_WIFI_NAME";
    const char* password = "YOUR_WIFI_PASSWORD";

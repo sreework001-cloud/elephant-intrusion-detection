@@ -6,6 +6,11 @@
   Sensors: 1x Triaxial Geophone (Signal Conditioning / ADC Board)
   Communication: Wi-Fi -> MQTT (broker.hivemq.com:1883) -> FastAPI Dashboard
   Topic: elephant/nodes/NODE_01
+  
+  GPIO Pin Mapping:
+  - Geophone X (Horizontal E-W): GPIO 33
+  - Geophone Y (Horizontal N-S): GPIO 35
+  - Geophone Z (Vertical Ground): GPIO 34
   ===============================================================================
 */
 
@@ -24,9 +29,9 @@ const char* mqtt_topic = "elephant/nodes/NODE_01";
 const char* node_id = "NODE_01";
 
 // --- 3. Pin Definitions (Signal Conditioning ADC Pins) ---
-const int PIN_GEO_X = 36; // VP (Analog input for Horizontal X)
-const int PIN_GEO_Y = 39; // VN (Analog input for Horizontal Y)
-const int PIN_GEO_Z = 34; // Pin 34 (Analog input for Vertical Z)
+const int PIN_GEO_X = 33; // GPIO 33 (Analog input for Horizontal X)
+const int PIN_GEO_Y = 35; // GPIO 35 (Analog input for Horizontal Y)
+const int PIN_GEO_Z = 34; // GPIO 34 (Analog input for Vertical Z)
 
 // Calibration Offset (Baseline mid-point for 3.3V ADC: 4095/2 ≈ 2048)
 const int ADC_BASELINE = 2048;
