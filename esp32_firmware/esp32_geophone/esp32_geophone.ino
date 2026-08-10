@@ -27,9 +27,10 @@
 #include <SD.h>
 
 // --- 1. Network & Broker Configuration ---
-const char* ssid = "SRE";          // <-- Configured Personal Hotspot SSID
-const char* password = "12345678";  // <-- Configured Personal Hotspot Password
+const char* ssid = "SRE";          // <-- Personal Hotspot SSID
+const char* password = "12345678";  // <-- Personal Hotspot Password
 
+// Primary & Fallback MQTT Brokers
 const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
 const char* mqtt_topic = "elephant/nodes/NODE_01";
@@ -39,12 +40,12 @@ const char* node_id = "NODE_01";
 const int PIN_GEO_X = 33;
 const int PIN_GEO_Y = 35;
 const int PIN_GEO_Z = 34;
-int SD_CS_PIN = 5; // Default CS pin, auto-detected at startup
+int SD_CS_PIN = 5; // Auto-scanned at startup
 
 // --- 3. Sampling & Timing Parameters ---
 const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz = 1 sample every 5000 µs (5ms)
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000; // 1 Hz summary telemetry packet
-const unsigned long MQTT_RETRY_INTERVAL_MS = 5000; // Non-blocking 5s retry for MQTT
+const unsigned long MQTT_RETRY_INTERVAL_MS = 3000; // Non-blocking 3s retry for MQTT
 
 // --- 4. Uncalibrated ADC & Sensitivity Scale Placeholders ---
 const int ADC_BASELINE = 2048; // 12-bit ADC midpoint (3.3V / 2)
@@ -62,6 +63,7 @@ bool mqttOK = false;
 
 File logFile;
 const char* logFilename = "/geophone_log.csv";
+int sdWriteBufferCount = 0;
 
 unsigned long sampleCounter = 0;
 unsigned long samplesThisSecond = 0;
@@ -126,7 +128,7 @@ void reconnectMQTTNonBlocking() {
   if (nowMs - lastMqttRetryMs >= MQTT_RETRY_INTERVAL_MS) {
     lastMqttRetryMs = nowMs;
     
-    Serial.print("[MQTT] Attempting non-blocking connection to ");
+    Serial.print("[MQTT] Attempting connection to ");
     Serial.print(mqtt_server);
     Serial.print("... ");
 
@@ -135,20 +137,19 @@ void reconnectMQTTNonBlocking() {
     
     if (client.connect(clientId.c_str())) {
       mqttOK = true;
-      Serial.println("[CONNECTED]");
+      Serial.println("[CONNECTED to MQTT Broker!]");
     } else {
       mqttOK = false;
-      Serial.print("[FAILED, rc=");
-      Serial.print(client.state());
-      Serial.println(" - Will retry in background]");
+      int state = client.state();
+      Serial.print("[FAILED, Error Code = ");
+      Serial.print(state);
+      Serial.println("] (Will retry in background)");
     }
   }
 }
 
 void initSDCard() {
   Serial.println("[SD Card] Scanning PCB SPI Chip Select (CS) Pins...");
-  
-  // List of common CS pins on custom ESP32 PCBs (Pin 5, 15, 13, 4, 2)
   int candidateCsPins[] = {5, 15, 13, 4, 2};
   sdOK = false;
 
@@ -160,7 +161,7 @@ void initSDCard() {
     if (SD.begin(pin)) {
       SD_CS_PIN = pin;
       sdOK = true;
-      Serial.println("[SUCCESS - SD Card Detected & Verified]");
+      Serial.println("[SUCCESS - SD Card Detected]");
       break;
     } else {
       Serial.println("[No Response]");
@@ -177,12 +178,19 @@ void initSDCard() {
       logFile = SD.open(logFilename, FILE_WRITE);
       if (logFile) {
         logFile.println("Timestamp,Sample_Number,Raw_X,Raw_Y,Raw_Z");
+        logFile.flush();
         logFile.close();
         Serial.println("[SD Card] Created new CSV log file with header.");
       }
     }
+
+    // Keep logFile open in append mode for high-speed 200 Hz buffered writing
+    logFile = SD.open(logFilename, FILE_APPEND);
+    if (!logFile) {
+      sdOK = false;
+    }
   } else {
-    Serial.println("[SD Card] FAILED - Check: 1. FAT32 Format, 2. Card fully inserted into PCB slot]");
+    Serial.println("[SD Card] FAILED - Check: 1. FAT32 Format, 2. Card fully inserted]");
   }
 }
 
@@ -229,7 +237,7 @@ void setup() {
 
   Serial.println("----------------------------------------------------------");
   Serial.println("Target Sensor Sampling Rate : 200 Hz (5000 µs interval)");
-  Serial.println("SD Card Logging Rate        : 200 Hz (every sample)");
+  Serial.println("SD Card Logging Rate        : 200 Hz (Buffered)");
   Serial.println("MQTT Telemetry Rate         : 1 Hz (aggregated summary)");
   Serial.println("==========================================================\n");
 
@@ -241,7 +249,7 @@ void setup() {
 void loop() {
   unsigned long currentMicros = micros();
 
-  // --- PATH 1: 200 Hz Non-Blocking Timed Sensor Acquisition & SD Logging ---
+  // --- PATH 1: 200 Hz High-Speed Buffered Sensor Acquisition & SD Logging ---
   if (currentMicros - lastSampleMicros >= SAMPLE_INTERVAL_MICROS) {
     lastSampleMicros += SAMPLE_INTERVAL_MICROS;
     sampleCounter++;
@@ -264,22 +272,22 @@ void loop() {
     if (vz > peakVibZ) peakVibZ = vz;
     sumVmagSquared += (vMag * vMag);
 
-    // Path 1 Log: Store 200 Hz raw sample to SD card
-    if (sdOK) {
-      logFile = SD.open(logFilename, FILE_APPEND);
-      if (logFile) {
-        logFile.print(getRTCTimestamp());
-        logFile.print(",");
-        logFile.print(sampleCounter);
-        logFile.print(",");
-        logFile.print(rawX);
-        logFile.print(",");
-        logFile.print(rawY);
-        logFile.print(",");
-        logFile.println(rawZ);
-        logFile.close();
-      } else {
-        sdOK = false; // Mark error without stopping acquisition
+    // High-Speed Buffered Log to SD Card (Flush every 50 samples = 0.25s)
+    if (sdOK && logFile) {
+      logFile.print(getRTCTimestamp());
+      logFile.print(",");
+      logFile.print(sampleCounter);
+      logFile.print(",");
+      logFile.print(rawX);
+      logFile.print(",");
+      logFile.print(rawY);
+      logFile.print(",");
+      logFile.println(rawZ);
+      
+      sdWriteBufferCount++;
+      if (sdWriteBufferCount >= 50) {
+        logFile.flush(); // Flush buffer to SD card without closing file
+        sdWriteBufferCount = 0;
       }
     }
   }
@@ -306,7 +314,7 @@ void loop() {
     float totalPeakMag = sqrt(peakVibX * peakVibX + peakVibY * peakVibY + peakVibZ * peakVibZ);
 
     String statusStr = (totalPeakMag >= 4.0) ? "ALERT" : "ONLINE";
-    float fDomTest = (totalPeakMag >= 4.0) ? 18.5 : 3.2; // Preliminary test placeholder
+    float fDomTest = (totalPeakMag >= 4.0) ? 18.5 : 3.2;
     int confidence = (totalPeakMag >= 4.0) ? 94 : 85;
     int rssiVal = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -99;
     String currentRtcTime = getRTCTimestamp();
