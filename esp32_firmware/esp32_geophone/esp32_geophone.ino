@@ -27,8 +27,8 @@
 #include <SD.h>
 
 // --- 1. Network & Broker Configuration ---
-const char* ssid = "YOUR_WIFI_SSID";          // <-- Replace with 2.4GHz Wi-Fi or Mobile Hotspot SSID
-const char* password = "YOUR_WIFI_PASSWORD";  // <-- Replace with Wi-Fi Password
+const char* ssid = "SRE";          // <-- Configured Personal Hotspot SSID
+const char* password = "12345678";  // <-- Configured Personal Hotspot Password
 
 const char* mqtt_server = "broker.hivemq.com";
 const int mqtt_port = 1883;
@@ -104,7 +104,7 @@ void printWiFiStatusDiagnostic() {
 }
 
 void setupWiFi() {
-  Serial.print("[Wi-Fi] Connecting to SSID: ");
+  Serial.print("[Wi-Fi] Connecting to Personal Hotspot: ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
