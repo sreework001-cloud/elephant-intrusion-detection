@@ -234,8 +234,9 @@ void setup() {
   initSDCard();
   setupWiFi();
 
-  // 3. Configure MQTT
+  // 3. Configure MQTT Client Buffer Size (Set to 512 bytes so JSON payload fits!)
   client.setServer(mqtt_server, mqtt_port);
+  client.setBufferSize(512); // <--- CRITICAL FIX: Expand packet buffer from 128 to 512 bytes
   client.setSocketTimeout(5);
   client.setKeepAlive(30);
 
@@ -345,9 +346,9 @@ void loop() {
 
     if (WiFi.status() == WL_CONNECTED && client.connected()) {
       if (client.publish(mqtt_topic, jsonBuffer)) {
-        Serial.println("[MQTT] PUBLISH SUCCESS!");
+        Serial.println("[MQTT 1Hz Telemetry] PUBLISH SUCCESS!");
       } else {
-        Serial.println("[MQTT] PUBLISH FAILED!");
+        Serial.println("[MQTT 1Hz Telemetry] PUBLISH FAILED - Payload size exceeds buffer!");
       }
     }
 
