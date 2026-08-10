@@ -2,7 +2,7 @@
   ===============================================================================
   🐘 ELEPHANT INTRUSION EARLY WARNING SYSTEM - DUAL-PATH ESP32 FIRMWARE 🐘
   ===============================================================================
-  Hardware: ESP32-WROOM-32D + DS3231 RTC + SPI SD Card + Signal Conditioning ADC
+  Hardware: ESP32-WROOM-32D + Custom PCB (Rev X7 AWNA) + DS3231 RTC + SPI SD Card
   Sampling: 200 Hz (5ms period) Non-blocking Timed Sampling (micros())
   
   Dual-Path Execution:
@@ -14,7 +14,7 @@
     - Geophone Y (Horizontal N-S): GPIO 35 (ADC1 CH7)
     - Geophone Z (Vertical Ground): GPIO 34 (ADC1 CH6)
     - I2C RTC (DS3231/DS1307): SDA -> GPIO 21, SCL -> GPIO 22
-    - SPI SD Card CS: GPIO 5 (SCK: 18, MISO: 19, MOSI: 23)
+    - SPI SD Card CS: Auto-scanned across GPIO 5, 15, 13, 4, 2
   ===============================================================================
 */
 
@@ -39,7 +39,7 @@ const char* node_id = "NODE_01";
 const int PIN_GEO_X = 33;
 const int PIN_GEO_Y = 35;
 const int PIN_GEO_Z = 34;
-const int SD_CS_PIN = 5;
+int SD_CS_PIN = 5; // Default CS pin, auto-detected at startup
 
 // --- 3. Sampling & Timing Parameters ---
 const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz = 1 sample every 5000 µs (5ms)
@@ -146,13 +146,30 @@ void reconnectMQTTNonBlocking() {
 }
 
 void initSDCard() {
-  Serial.print("[SD Card] Initializing SPI SD Card (CS Pin ");
-  Serial.print(SD_CS_PIN);
-  Serial.print(")... ");
+  Serial.println("[SD Card] Scanning PCB SPI Chip Select (CS) Pins...");
+  
+  // List of common CS pins on custom ESP32 PCBs (Pin 5, 15, 13, 4, 2)
+  int candidateCsPins[] = {5, 15, 13, 4, 2};
+  sdOK = false;
 
-  if (SD.begin(SD_CS_PIN)) {
-    sdOK = true;
-    Serial.println("[OK - FAT32 Verified]");
+  for (int pin : candidateCsPins) {
+    Serial.print("[SD Card] Testing CS Pin ");
+    Serial.print(pin);
+    Serial.print("... ");
+    
+    if (SD.begin(pin)) {
+      SD_CS_PIN = pin;
+      sdOK = true;
+      Serial.println("[SUCCESS - SD Card Detected & Verified]");
+      break;
+    } else {
+      Serial.println("[No Response]");
+    }
+  }
+
+  if (sdOK) {
+    Serial.print("[SD Card] Active CS Pin: GPIO ");
+    Serial.println(SD_CS_PIN);
     Serial.print("[SD Card] Target Log File: ");
     Serial.println(logFilename);
 
@@ -165,8 +182,7 @@ void initSDCard() {
       }
     }
   } else {
-    sdOK = false;
-    Serial.println("[FAILED - Check: 1. FAT32 Format, 2. CS Pin 5 / SPI Wiring, 3. Card Insertion]");
+    Serial.println("[SD Card] FAILED - Check: 1. FAT32 Format, 2. Card fully inserted into PCB slot]");
   }
 }
 
