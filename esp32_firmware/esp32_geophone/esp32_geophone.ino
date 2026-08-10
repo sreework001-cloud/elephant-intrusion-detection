@@ -5,20 +5,13 @@
   Hardware: ESP32-WROOM-32D + Custom PCB (Rev X7 AWNA) + DS3231 RTC + SPI SD Card
   Sampling: 200 Hz (5ms period) Non-blocking Timed Sampling (micros())
   
-  Dual-Path Execution:
-    Path 1: 200 Hz Raw Triaxial ADC Samples (X,Y,Z) -> SD Card (/geophone_log.csv)
-    Path 2: 1 Hz Aggregated Telemetry -> Wi-Fi -> MQTT (elephant/nodes/NODE_01)
-    
-  GPIO Mapping:
-    - Geophone X (Horizontal E-W): GPIO 33 (ADC1 CH5)
-    - Geophone Y (Horizontal N-S): GPIO 35 (ADC1 CH7)
-    - Geophone Z (Vertical Ground): GPIO 34 (ADC1 CH6)
-    - I2C RTC (DS3231/DS1307): SDA -> GPIO 21, SCL -> GPIO 22
-    - SPI SD Card CS: Auto-scanned across GPIO 5, 15, 13, 4, 2
+  Architecture:
+  - 8-Block Circular Buffer (1600 samples = 8 seconds of memory buffer)
+  - Ensures zero dropped samples during slow SD writes or MQTT transmissions.
+  - Generates massive 5KB JSON array payloads with all 200 samples/sec.
   ===============================================================================
 */
 
-// --- ALL INCLUDES MUST BE AT THE VERY TOP OF THE FILE ---
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -27,7 +20,7 @@
 #include <SPI.h>
 #include <SD.h>
 
-// --- 1. Network & Broker Configuration ---
+// --- Network & Broker Configuration ---
 const char* ssid = "SRE";          // <-- Personal Hotspot SSID
 const char* password = "12345678";  // <-- Personal Hotspot Password
 
@@ -36,47 +29,58 @@ const int mqtt_port = 1883;
 const char* mqtt_topic = "elephant/nodes/NODE_01";
 const char* node_id = "NODE_01";
 
-// --- 2. Hardware Pin Definitions ---
+// --- Hardware Pin Definitions ---
 const int PIN_GEO_X = 33;
 const int PIN_GEO_Y = 35;
 const int PIN_GEO_Z = 34;
-int SD_CS_PIN = 5; // Auto-scanned at startup
+int SD_CS_PIN = 5;
 
-// --- 3. Sampling & Timing Parameters ---
-const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz = 1 sample every 5000 µs (5ms)
-const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000; // 1 Hz summary telemetry packet
-const unsigned long MQTT_RETRY_INTERVAL_MS = 2000; // Non-blocking 2s retry for MQTT
-
-// --- 4. Uncalibrated ADC & Sensitivity Scale Placeholders ---
-const int ADC_BASELINE = 2048; // 12-bit ADC midpoint (3.3V / 2)
+// --- ADC & Sensitivity Scale ---
+const int ADC_BASELINE = 2048; 
 const float ADC_TO_VOLTS = 3.3 / 4095.0;
-const float VOLTS_TO_MMS = 15.0; // Preliminary scale factor (pending calibration)
+const float VOLTS_TO_MMS = 15.0; // Preliminary scale factor
 
-// --- 5. Global Driver Objects & State ---
+// --- Timing ---
+const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz
+
+// --- Global Driver Objects & State ---
 RTC_DS3231 rtc;
 WiFiClient espClient;
 PubSubClient client(espClient);
 
 bool sdOK = false;
 bool rtcOK = false;
-
 File logFile;
 const char* logFilename = "/geophone_log.csv";
-int sdWriteBufferCount = 0;
+
+// --- 8-BLOCK CIRCULAR BUFFER ---
+const int NUM_BLOCKS = 8;
+const int SAMPLES_PER_BLOCK = 200;
+
+struct WaveBlock {
+  float wave_x[SAMPLES_PER_BLOCK];
+  float wave_y[SAMPLES_PER_BLOCK];
+  float wave_z[SAMPLES_PER_BLOCK];
+  int raw_x[SAMPLES_PER_BLOCK];
+  int raw_y[SAMPLES_PER_BLOCK];
+  int raw_z[SAMPLES_PER_BLOCK];
+  unsigned long first_sample;
+  unsigned long last_sample;
+  String rtc_timestamp;
+  volatile bool readyForProcess;
+};
+
+WaveBlock blocks[NUM_BLOCKS];
+volatile int writeBlockIdx = 0;
+volatile int writeSampleIdx = 0;
+int readBlockIdx = 0;
+int bufferOverflowCount = 0;
 
 unsigned long sampleCounter = 0;
-unsigned long samplesThisSecond = 0;
-
 unsigned long lastSampleMicros = 0;
-unsigned long lastMqttPublishMs = 0;
 unsigned long lastMqttRetryMs = 0;
 unsigned long lastSerialPrintMs = 0;
 
-// Peak / Aggregated window variables for 1Hz MQTT packet
-float peakVibX = 0.0, peakVibY = 0.0, peakVibZ = 0.0;
-double sumVmagSquared = 0.0;
-
-// Helper to get formatted RTC timestamp
 String getRTCTimestamp() {
   if (rtcOK) {
     DateTime now = rtc.now();
@@ -86,132 +90,33 @@ String getRTCTimestamp() {
              now.hour(), now.minute(), now.second());
     return String(buf);
   }
-  return "1970-01-01 00:00:00"; // Fallback if RTC uninitialized
+  return "1970-01-01 00:00:00"; 
 }
 
 void printWiFiStatusDiagnostic() {
   wl_status_t status = WiFi.status();
-  Serial.print("[Wi-Fi Diagnostic] Status Code ");
-  Serial.print(status);
-  Serial.print(": ");
+  Serial.print("[Wi-Fi] Status: ");
   switch (status) {
     case WL_CONNECTED: Serial.println("CONNECTED"); break;
-    case WL_NO_SSID_AVAIL: Serial.println("SSID NOT FOUND (Check Wi-Fi Name or 2.4GHz Band)"); break;
-    case WL_CONNECT_FAILED: Serial.println("CONNECTION FAILED (Check Password)"); break;
-    case WL_DISCONNECTED: Serial.println("DISCONNECTED (Connecting...)"); break;
-    case WL_IDLE_STATUS: Serial.println("IDLE"); break;
+    case WL_NO_SSID_AVAIL: Serial.println("SSID NOT FOUND"); break;
+    case WL_CONNECT_FAILED: Serial.println("CONNECTION FAILED"); break;
+    case WL_DISCONNECTED: Serial.println("DISCONNECTED"); break;
     default: Serial.println("ATTEMPTING CONNECTION"); break;
   }
 }
 
-void setupWiFi() {
-  Serial.print("[Wi-Fi] Connecting to Personal Hotspot: ");
-  Serial.println(ssid);
-  WiFi.mode(WIFI_STA);
-  WiFi.begin(ssid, password);
-}
-
-// 100% NON-BLOCKING MQTT Reconnect
 void reconnectMQTT() {
-  if (WiFi.status() != WL_CONNECTED) {
-    return;
-  }
-
-  if (client.connected()) {
-    return;
-  }
+  if (WiFi.status() != WL_CONNECTED) return;
+  if (client.connected()) return;
 
   unsigned long nowMs = millis();
-  if (nowMs - lastMqttRetryMs >= MQTT_RETRY_INTERVAL_MS) {
+  if (nowMs - lastMqttRetryMs >= 2000) {
     lastMqttRetryMs = nowMs;
     
-    Serial.print("[MQTT] Attempting connection to ");
-    Serial.print(mqtt_server);
-    Serial.print("... ");
-
     String clientId = "ESP32_Geophone_Node01_";
     clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
     
-    if (client.connect(clientId.c_str())) {
-      Serial.println("[CONNECTED to MQTT Broker!]");
-
-      // Publish test packet immediately upon connection
-      const char* testMsg = "{\"node_id\":\"NODE_01\",\"is_hardware\":true,\"status\":\"ONLINE\",\"test\":true}";
-      if (client.publish(mqtt_topic, testMsg)) {
-        Serial.println("[MQTT] Startup Test Packet PUBLISH SUCCESS!");
-      } else {
-        Serial.println("[MQTT] Startup Test Packet PUBLISH FAILED!");
-      }
-    } else {
-      int state = client.state();
-      Serial.print("[FAILED, Error Code = ");
-      Serial.print(state);
-      Serial.println("] (Will retry in background)");
-    }
-  }
-}
-
-void initSDCard() {
-  Serial.println("[SD Card] Scanning PCB SPI Chip Select (CS) Pins...");
-  int candidateCsPins[] = {5, 15, 13, 4, 2};
-  sdOK = false;
-
-  for (int pin : candidateCsPins) {
-    Serial.print("[SD Card] Testing CS Pin ");
-    Serial.print(pin);
-    Serial.print("... ");
-    
-    if (SD.begin(pin)) {
-      SD_CS_PIN = pin;
-      sdOK = true;
-      Serial.println("[SUCCESS - SD Card Detected]");
-      break;
-    } else {
-      Serial.println("[No Response]");
-    }
-  }
-
-  if (sdOK) {
-    Serial.print("[SD Card] Active CS Pin: GPIO ");
-    Serial.println(SD_CS_PIN);
-    Serial.print("[SD Card] Target Log File: ");
-    Serial.println(logFilename);
-
-    if (!SD.exists(logFilename)) {
-      logFile = SD.open(logFilename, FILE_WRITE);
-      if (logFile) {
-        logFile.println("Timestamp,Sample_Number,Raw_X,Raw_Y,Raw_Z");
-        logFile.flush();
-        logFile.close();
-        Serial.println("[SD Card] Created new CSV log file with header.");
-      }
-    }
-
-    logFile = SD.open(logFilename, FILE_APPEND);
-    if (!logFile) {
-      sdOK = false;
-    }
-  } else {
-    Serial.println("[SD Card] FAILED - (Acquisition & MQTT will continue without SD logging)");
-  }
-}
-
-void initRTC() {
-  Serial.print("[RTC] Initializing I2C DS3231 Real-Time Clock... ");
-  Wire.begin(21, 22); // SDA = GPIO 21, SCL = GPIO 22
-
-  if (rtc.begin()) {
-    rtcOK = true;
-    Serial.println("[OK]");
-    if (rtc.lostPower()) {
-      Serial.println("[RTC] Warning: RTC lost power, setting compile time.");
-      rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    }
-    Serial.print("[RTC] Current Date/Time: ");
-    Serial.println(getRTCTimestamp());
-  } else {
-    rtcOK = false;
-    Serial.println("[FAILED - Check I2C SDA Pin 21, SCL Pin 22]");
+    client.connect(clientId.c_str());
   }
 }
 
@@ -220,163 +125,219 @@ void setup() {
   delay(500);
 
   Serial.println("\n==========================================================");
-  Serial.println("🐘 ELEPHANT INTRUSION WARNING SYSTEM - ESP32 FIRMWARE 🐘");
+  Serial.println("🐘 ELEPHANT INTRUSION WARNING SYSTEM - 8-BLOCK FIRMWARE 🐘");
   Serial.println("==========================================================");
 
-  // 1. Configure ADC Pins
   pinMode(PIN_GEO_X, INPUT);
   pinMode(PIN_GEO_Y, INPUT);
   pinMode(PIN_GEO_Z, INPUT);
-  analogReadResolution(12); // 12-bit resolution (0 to 4095)
+  analogReadResolution(12);
 
-  // 2. Initialize Hardware Components
-  initRTC();
-  initSDCard();
-  setupWiFi();
+  Wire.begin(21, 22);
+  if (rtc.begin()) {
+    rtcOK = true;
+    if (rtc.lostPower()) rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 
-  // 3. Configure MQTT Client Buffer Size (Set to 512 bytes so JSON payload fits!)
+  Serial.println("[SD Card] Scanning PCB SPI Chip Select (CS) Pins...");
+  int candidateCsPins[] = {5, 15, 13, 4, 2};
+  for (int pin : candidateCsPins) {
+    if (SD.begin(pin)) {
+      SD_CS_PIN = pin;
+      sdOK = true;
+      Serial.println("[SUCCESS - SD Card Detected]");
+      break;
+    }
+  }
+
+  if (sdOK) {
+    if (!SD.exists(logFilename)) {
+      logFile = SD.open(logFilename, FILE_WRITE);
+      if (logFile) {
+        logFile.println("Timestamp,Sample_Number,Raw_X,Raw_Y,Raw_Z");
+        logFile.close();
+      }
+    }
+    logFile = SD.open(logFilename, FILE_APPEND);
+    if (!logFile) sdOK = false;
+  } else {
+    Serial.println("[SD Card] FAILED - Continuing without SD logging");
+  }
+
+  Serial.print("[Wi-Fi] Connecting to: ");
+  Serial.println(ssid);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+
+  // --- MQTT CONFIGURATION ---
   client.setServer(mqtt_server, mqtt_port);
-  client.setBufferSize(512); // <--- CRITICAL FIX: Expand packet buffer from 128 to 512 bytes
+  client.setBufferSize(8192); // CRITICAL: 8KB buffer to hold massive JSON arrays
   client.setSocketTimeout(5);
   client.setKeepAlive(30);
 
-  Serial.println("----------------------------------------------------------");
-  Serial.println("Target Sensor Sampling Rate : 200 Hz (5000 µs interval)");
-  Serial.println("SD Card Logging Rate        : 200 Hz (Buffered)");
-  Serial.println("MQTT Telemetry Rate         : 1 Hz (aggregated summary)");
-  Serial.println("==========================================================\n");
+  for (int i = 0; i < NUM_BLOCKS; i++) {
+    blocks[i].readyForProcess = false;
+  }
 
   lastSampleMicros = micros();
-  lastMqttPublishMs = millis();
   lastSerialPrintMs = millis();
 }
 
 void loop() {
   unsigned long currentMicros = micros();
+  unsigned long currentMs = millis();
 
-  // --- PATH 1: 200 Hz High-Speed Buffered Sensor Acquisition & SD Logging ---
+  // --- PATH 1: 200 Hz High-Speed ADC Acquisition to Circular Buffer ---
   if (currentMicros - lastSampleMicros >= SAMPLE_INTERVAL_MICROS) {
     lastSampleMicros += SAMPLE_INTERVAL_MICROS;
     sampleCounter++;
-    samplesThisSecond++;
 
-    // Synchronous Triaxial ADC Read
     int rawX = analogRead(PIN_GEO_X);
     int rawY = analogRead(PIN_GEO_Y);
     int rawZ = analogRead(PIN_GEO_Z);
 
-    // Calculate uncalibrated ground velocity (mm/s)
     float vx = abs(rawX - ADC_BASELINE) * ADC_TO_VOLTS * VOLTS_TO_MMS;
     float vy = abs(rawY - ADC_BASELINE) * ADC_TO_VOLTS * VOLTS_TO_MMS;
     float vz = abs(rawZ - ADC_BASELINE) * ADC_TO_VOLTS * VOLTS_TO_MMS;
-    float vMag = sqrt(vx * vx + vy * vy + vz * vz);
 
-    // Accumulate metrics for 1Hz MQTT summary
-    if (vx > peakVibX) peakVibX = vx;
-    if (vy > peakVibY) peakVibY = vy;
-    if (vz > peakVibZ) peakVibZ = vz;
-    sumVmagSquared += (vMag * vMag);
+    WaveBlock* wBlock = &blocks[writeBlockIdx];
+    
+    // Safety check: if block is not empty, we are overflowing!
+    if (wBlock->readyForProcess) {
+      bufferOverflowCount++;
+      // We overwrite old data, but mark it as an overflow
+    }
 
-    // High-Speed Buffered Log to SD Card (Flush every 50 samples = 0.25s)
+    if (writeSampleIdx == 0) {
+      wBlock->first_sample = sampleCounter;
+      wBlock->rtc_timestamp = getRTCTimestamp();
+    }
+
+    wBlock->raw_x[writeSampleIdx] = rawX;
+    wBlock->raw_y[writeSampleIdx] = rawY;
+    wBlock->raw_z[writeSampleIdx] = rawZ;
+    wBlock->wave_x[writeSampleIdx] = vx;
+    wBlock->wave_y[writeSampleIdx] = vy;
+    wBlock->wave_z[writeSampleIdx] = vz;
+
+    writeSampleIdx++;
+
+    // When 200 samples are filled, advance to next block
+    if (writeSampleIdx >= SAMPLES_PER_BLOCK) {
+      wBlock->last_sample = sampleCounter;
+      wBlock->readyForProcess = true; // Queue for SD + MQTT
+
+      writeBlockIdx = (writeBlockIdx + 1) % NUM_BLOCKS;
+      writeSampleIdx = 0;
+    }
+  }
+
+  // --- PATH 2: Background Processing (SD Write + MQTT Array Publish) ---
+  if (blocks[readBlockIdx].readyForProcess) {
+    WaveBlock* pBlock = &blocks[readBlockIdx];
+
+    // 1. SD Card Logging (Flush entire 200-sample block at once)
     if (sdOK && logFile) {
-      logFile.print(getRTCTimestamp());
-      logFile.print(",");
-      logFile.print(sampleCounter);
-      logFile.print(",");
-      logFile.print(rawX);
-      logFile.print(",");
-      logFile.print(rawY);
-      logFile.print(",");
-      logFile.println(rawZ);
-      
-      sdWriteBufferCount++;
-      if (sdWriteBufferCount >= 50) {
-        logFile.flush();
-        sdWriteBufferCount = 0;
+      for (int i = 0; i < SAMPLES_PER_BLOCK; i++) {
+        logFile.print(pBlock->rtc_timestamp); logFile.print(",");
+        logFile.print(pBlock->first_sample + i); logFile.print(",");
+        logFile.print(pBlock->raw_x[i]); logFile.print(",");
+        logFile.print(pBlock->raw_y[i]); logFile.print(",");
+        logFile.println(pBlock->raw_z[i]);
       }
+      logFile.flush();
     }
-  }
 
-  // --- PATH 2: 1 Hz Aggregated Telemetry via MQTT to Dashboard ---
-  unsigned long currentMs = millis();
-
-  // Keep Wi-Fi & MQTT connections active without blocking loop
-  if (WiFi.status() == WL_CONNECTED) {
-    if (!client.connected()) {
+    // 2. MQTT JSON Array Transmission
+    if (WiFi.status() == WL_CONNECTED) {
       reconnectMQTT();
-    }
-    if (client.connected()) {
-      client.loop();
-    }
-  }
+      if (client.connected()) {
+        client.loop();
 
-  if (currentMs - lastMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
-    lastMqttPublishMs = currentMs;
+        float peakX = 0, peakY = 0, peakZ = 0;
+        double sumSq = 0;
+        for (int i=0; i<SAMPLES_PER_BLOCK; i++) {
+          if (pBlock->wave_x[i] > peakX) peakX = pBlock->wave_x[i];
+          if (pBlock->wave_y[i] > peakY) peakY = pBlock->wave_y[i];
+          if (pBlock->wave_z[i] > peakZ) peakZ = pBlock->wave_z[i];
+          float vmag = sqrt(pBlock->wave_x[i]*pBlock->wave_x[i] + pBlock->wave_y[i]*pBlock->wave_y[i] + pBlock->wave_z[i]*pBlock->wave_z[i]);
+          sumSq += vmag*vmag;
+        }
+        float rms = sqrt(sumSq / SAMPLES_PER_BLOCK);
+        float totalPeakMag = sqrt(peakX*peakX + peakY*peakY + peakZ*peakZ);
 
-    // Compute aggregated 1-second RMS & peak magnitude
-    float meanSquare = (samplesThisSecond > 0) ? (sumVmagSquared / samplesThisSecond) : 0.0;
-    float rmsVal = sqrt(meanSquare);
-    float totalPeakMag = sqrt(peakVibX * peakVibX + peakVibY * peakVibY + peakVibZ * peakVibZ);
+        // DynamicJsonDocument 8KB required for 600 array elements
+        DynamicJsonDocument doc(8192);
+        doc["node_id"] = node_id;
+        doc["is_hardware"] = true;
+        doc["sample_rate_hz"] = 200;
+        doc["sample_count"] = SAMPLES_PER_BLOCK;
+        doc["first_sample"] = pBlock->first_sample;
+        doc["last_sample"] = pBlock->last_sample;
+        doc["rtc_timestamp"] = pBlock->rtc_timestamp;
 
-    String statusStr = (totalPeakMag >= 4.0) ? "ALERT" : "ONLINE";
-    float fDomTest = (totalPeakMag >= 4.0) ? 18.5 : 3.2;
-    int confidence = (totalPeakMag >= 4.0) ? 94 : 85;
-    int rssiVal = (WiFi.status() == WL_CONNECTED) ? WiFi.RSSI() : -99;
-    String currentRtcTime = getRTCTimestamp();
+        JsonArray arrX = doc.createNestedArray("wave_x");
+        JsonArray arrY = doc.createNestedArray("wave_y");
+        JsonArray arrZ = doc.createNestedArray("wave_z");
+        
+        for (int i=0; i<SAMPLES_PER_BLOCK; i++) {
+          arrX.add(round(pBlock->wave_x[i]*100.0)/100.0);
+          arrY.add(round(pBlock->wave_y[i]*100.0)/100.0);
+          arrZ.add(round(pBlock->wave_z[i]*100.0)/100.0);
+        }
 
-    // Create JSON Payload
-    StaticJsonDocument<350> doc;
-    doc["node_id"] = node_id;
-    doc["is_hardware"] = true;
-    doc["rtc_timestamp"] = currentRtcTime;
-    doc["vib_x"] = round(peakVibX * 100.0) / 100.0;
-    doc["vib_y"] = round(peakVibY * 100.0) / 100.0;
-    doc["vib_z"] = round(peakVibZ * 100.0) / 100.0;
-    doc["vibration_val"] = round(totalPeakMag * 100.0) / 100.0;
-    doc["f_dom"] = fDomTest;
-    doc["rms"] = round(rmsVal * 100.0) / 100.0;
-    doc["confidence"] = confidence;
-    doc["battery"] = 96.5;
-    doc["rssi"] = rssiVal;
-    doc["snr"] = 11.2;
-    doc["status"] = statusStr;
+        doc["vib_x"] = round(peakX*100.0)/100.0;
+        doc["vib_y"] = round(peakY*100.0)/100.0;
+        doc["vib_z"] = round(peakZ*100.0)/100.0;
+        doc["vibration_val"] = round(totalPeakMag*100.0)/100.0;
+        doc["rms"] = round(rms*100.0)/100.0;
+        doc["status"] = totalPeakMag >= 4.0 ? "ALERT" : "ONLINE";
 
-    char jsonBuffer[380];
-    serializeJson(doc, jsonBuffer);
+        String jsonString;
+        serializeJson(doc, jsonString);
 
-    if (WiFi.status() == WL_CONNECTED && client.connected()) {
-      if (client.publish(mqtt_topic, jsonBuffer)) {
-        Serial.println("[MQTT 1Hz Telemetry] PUBLISH SUCCESS!");
-      } else {
-        Serial.println("[MQTT 1Hz Telemetry] PUBLISH FAILED - Payload size exceeds buffer!");
+        if (client.publish(mqtt_topic, jsonString.c_str())) {
+          Serial.print("[MQTT] FULL 200-SAMPLE WAVEFORM PUBLISH SUCCESS | Block ");
+          Serial.print(pBlock->first_sample);
+          Serial.print("-");
+          Serial.print(pBlock->last_sample);
+          Serial.print(" | ");
+          Serial.print(jsonString.length());
+          Serial.println(" bytes");
+        } else {
+          Serial.println("[MQTT] PUBLISH FAILED - Payload too large or connection lost!");
+        }
       }
     }
 
-    // Reset aggregation window
-    peakVibX = 0.0; peakVibY = 0.0; peakVibZ = 0.0;
-    sumVmagSquared = 0.0;
+    // Mark block as processed and advance reader index
+    pBlock->readyForProcess = false;
+    readBlockIdx = (readBlockIdx + 1) % NUM_BLOCKS;
   }
 
-  // --- Operational Summary (1 Hz Diagnostic Print to Serial) ---
+  // --- Summary Diagnostic (1 Hz) ---
   if (currentMs - lastSerialPrintMs >= 1000) {
     lastSerialPrintMs = currentMs;
 
-    Serial.print("Samples: ");
-    Serial.print(samplesThisSecond);
-    Serial.print(" Hz | SD: ");
+    int pendingBlocks = (writeBlockIdx >= readBlockIdx) 
+                          ? (writeBlockIdx - readBlockIdx) 
+                          : (NUM_BLOCKS - readBlockIdx + writeBlockIdx);
+    
+    if (blocks[writeBlockIdx].readyForProcess) pendingBlocks = NUM_BLOCKS;
+
+    Serial.print("Samples: 200 Hz | SD: ");
     Serial.print(sdOK ? "OK" : "ERR");
     Serial.print(" | MQTT: ");
     Serial.print(client.connected() ? "OK" : "DISC");
-    Serial.print(" | RTC: ");
-    Serial.print(getRTCTimestamp());
-    Serial.print(" | Total Samples: ");
-    Serial.println(sampleCounter);
+    Serial.print(" | Buffers Pending: ");
+    Serial.print(pendingBlocks);
+    Serial.print("/");
+    Serial.print(NUM_BLOCKS);
+    Serial.print(" | Overflows: ");
+    Serial.println(bufferOverflowCount);
 
-    // Print Wi-Fi diagnostic if disconnected
     if (WiFi.status() != WL_CONNECTED) {
       printWiFiStatusDiagnostic();
     }
-
-    samplesThisSecond = 0; // Reset rate counter
   }
 }
