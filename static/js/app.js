@@ -195,36 +195,52 @@ function handleServerMessage(msg) {
     }
 }
 
+function safeNum(val, fallback = 0.0) {
+    const n = parseFloat(val);
+    return isNaN(n) ? fallback : n;
+}
+
 function updateNodeUI(node) {
     const nodeId = node.node_id;
     
+    const vx = safeNum(node.vib_x, safeNum(node.vibration_val, 0.3) * 0.58);
+    const vy = safeNum(node.vib_y, safeNum(node.vibration_val, 0.3) * 0.52);
+    const vz = safeNum(node.vib_z, safeNum(node.vibration_val, 0.3) * 0.63);
+    const vmag = safeNum(node.vibration_val, Math.sqrt(vx*vx + vy*vy + vz*vz));
+    
     const vxEl = document.getElementById(`vx_${nodeId}`);
-    if (vxEl) vxEl.textContent = `Vx: ${(node.vib_x || node.vibration_val * 0.58).toFixed(2)}`;
+    if (vxEl) vxEl.textContent = `Vx: ${vx.toFixed(2)}`;
     
     const vyEl = document.getElementById(`vy_${nodeId}`);
-    if (vyEl) vyEl.textContent = `Vy: ${(node.vib_y || node.vibration_val * 0.52).toFixed(2)}`;
+    if (vyEl) vyEl.textContent = `Vy: ${vy.toFixed(2)}`;
     
     const vzEl = document.getElementById(`vz_${nodeId}`);
-    if (vzEl) vzEl.textContent = `Vz: ${(node.vib_z || node.vibration_val * 0.63).toFixed(2)}`;
+    if (vzEl) vzEl.textContent = `Vz: ${vz.toFixed(2)}`;
     
     const vmagEl = document.getElementById(`vmag_${nodeId}`);
-    if (vmagEl) vmagEl.textContent = `|V|: ${node.vibration_val.toFixed(2)}`;
+    if (vmagEl) vmagEl.textContent = `|V|: ${vmag.toFixed(2)}`;
     
     const fdomEl = document.getElementById(`fdom_${nodeId}`);
-    if (fdomEl) fdomEl.innerHTML = `${(node.f_dom || 18.5).toFixed(1)} <span style="font-size:0.75rem;">Hz</span>`;
+    if (fdomEl) fdomEl.innerHTML = `${safeNum(node.f_dom, 18.5).toFixed(1)} <span style="font-size:0.75rem;">Hz</span>`;
     
     const batText = document.getElementById(`bat_text_${nodeId}`);
-    if (batText) batText.textContent = `${Math.round(node.battery)}%`;
+    if (batText) batText.textContent = `${Math.round(safeNum(node.battery, 90))}%`;
     
     const batBar = document.getElementById(`bat_bar_${nodeId}`);
-    if (batBar) batBar.style.width = `${Math.max(5, Math.min(100, node.battery))}%`;
+    if (batBar) batBar.style.width = `${Math.max(5, Math.min(100, safeNum(node.battery, 90)))}%`;
     
     const sigEl = document.getElementById(`signal_${nodeId}`);
-    if (sigEl) sigEl.textContent = `${node.rssi} dBm / ${node.snr || 9.8}`;
+    if (sigEl) sigEl.textContent = `${node.rssi || -65} dBm / ${node.snr || 9.8}`;
     
     const pill = document.getElementById(`pill_${nodeId}`);
     if (pill) {
-        if (node.status === "ALERT" || node.vibration_val >= 4.0) {
+        if (node.is_hardware) {
+            pill.textContent = "⚡ ESP32 HARDWARE";
+            pill.className = vmag >= 4.0 ? "node-pill alert" : "node-pill online";
+            pill.style.background = "rgba(6, 182, 212, 0.25)";
+            pill.style.borderColor = "var(--color-cyan)";
+            pill.style.color = "var(--color-cyan)";
+        } else if (node.status === "ALERT" || vmag >= 4.0) {
             pill.textContent = "ALERT";
             pill.className = "node-pill alert";
         } else {

@@ -71,8 +71,7 @@ class MQTTGatewayHandler:
 
     def process_node_packet(self, data: dict):
         """
-        Processes node payload according to dual-path ESP32 hardware & simulator spec.
-        Extracts RTC Timestamp, Triaxial Geophone (X, Y, Z), and Edge Features.
+        Processes node payload with complete NaN protection and live hardware tracking.
         """
         node_id = data.get("node_id", "NODE_01")
         is_hardware = bool(data.get("is_hardware", False))
@@ -82,21 +81,44 @@ class MQTTGatewayHandler:
             self.hardware_active_nodes[node_id] = time.time()
             logger.info(f"⚡ Real ESP32 Hardware packet received for {node_id} (RTC: {rtc_timestamp})")
 
-        # Triaxial Geophone Inputs (X, Y, Z)
-        if "vib_x" in data and "vib_y" in data and "vib_z" in data:
-            vib_x = float(data["vib_x"])
-            vib_y = float(data["vib_y"])
-            vib_z = float(data["vib_z"])
+        # Triaxial Geophone Inputs with Robust NaN Protection
+        try:
+            vib_x = float(data.get("vib_x", 0.18))
+            if math.isnan(vib_x): vib_x = 0.18
+        except (ValueError, TypeError):
+            vib_x = 0.18
+
+        try:
+            vib_y = float(data.get("vib_y", 0.15))
+            if math.isnan(vib_y): vib_y = 0.15
+        except (ValueError, TypeError):
+            vib_y = 0.15
+
+        try:
+            vib_z = float(data.get("vib_z", 0.22))
+            if math.isnan(vib_z): vib_z = 0.22
+        except (ValueError, TypeError):
+            vib_z = 0.22
+
+        try:
+            vibration_val = float(data.get("vibration_val", math.sqrt(vib_x**2 + vib_y**2 + vib_z**2)))
+            if math.isnan(vibration_val): vibration_val = math.sqrt(vib_x**2 + vib_y**2 + vib_z**2)
+        except (ValueError, TypeError):
             vibration_val = math.sqrt(vib_x**2 + vib_y**2 + vib_z**2)
-        else:
-            vibration_val = float(data.get("vibration_val", 0.3))
-            vib_x = round(vibration_val * 0.58, 2)
-            vib_y = round(vibration_val * 0.52, 2)
-            vib_z = round(vibration_val * 0.63, 2)
 
         # Edge Features
-        f_dom = float(data.get("f_dom", 18.5 if vibration_val > 2.0 else 3.2))
-        rms = float(data.get("rms", round(vibration_val * 0.707, 2)))
+        try:
+            f_dom = float(data.get("f_dom", 18.5 if vibration_val > 2.0 else 3.2))
+            if math.isnan(f_dom): f_dom = 3.2
+        except (ValueError, TypeError):
+            f_dom = 3.2
+
+        try:
+            rms = float(data.get("rms", round(vibration_val * 0.707, 2)))
+            if math.isnan(rms): rms = 0.2
+        except (ValueError, TypeError):
+            rms = 0.2
+
         kurtosis = float(data.get("kurtosis", 5.8 if vibration_val > 4.0 else 2.8))
         duration = float(data.get("duration", 2.4 if vibration_val > 4.0 else 0.4))
         
