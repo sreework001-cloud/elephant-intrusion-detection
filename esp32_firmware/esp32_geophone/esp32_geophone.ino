@@ -18,6 +18,7 @@
   ===============================================================================
 */
 
+// --- ALL INCLUDES MUST BE AT THE VERY TOP OF THE FILE ---
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <ArduinoJson.h>
@@ -111,7 +112,7 @@ void setupWiFi() {
   WiFi.begin(ssid, password);
 }
 
-// 100% NON-BLOCKING MQTT Reconnect with verified socket settings & MAC-based Client ID
+// 100% NON-BLOCKING MQTT Reconnect
 void reconnectMQTTNonBlocking() {
   if (WiFi.status() != WL_CONNECTED) {
     mqttOK = false;
@@ -127,22 +128,22 @@ void reconnectMQTTNonBlocking() {
   if (nowMs - lastMqttRetryMs >= MQTT_RETRY_INTERVAL_MS) {
     lastMqttRetryMs = nowMs;
     
-    Serial.print("[MQTT] Connecting to ");
+    Serial.print("[MQTT] Attempting connection to ");
     Serial.print(mqtt_server);
     Serial.print("... ");
 
-    String clientId = "ESP32_NODE_01_";
-    clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
+    String clientId = "ESP32_Geophone_Node01_";
+    clientId += String(random(0xffff), HEX);
     
     if (client.connect(clientId.c_str())) {
       mqttOK = true;
-      Serial.println("[CONNECTED SUCCESSFULLY!]");
+      Serial.println("[CONNECTED to MQTT Broker!]");
     } else {
       mqttOK = false;
       int state = client.state();
-      Serial.print("[FAILED, State Code = ");
+      Serial.print("[FAILED, Error Code = ");
       Serial.print(state);
-      Serial.println("]");
+      Serial.println("] (Will retry in background)");
     }
   }
 }
@@ -183,6 +184,7 @@ void initSDCard() {
       }
     }
 
+    // Keep logFile open in append mode for high-speed 200 Hz buffered writing
     logFile = SD.open(logFilename, FILE_APPEND);
     if (!logFile) {
       sdOK = false;
@@ -230,7 +232,7 @@ void setup() {
   initSDCard();
   setupWiFi();
 
-  // 3. Configure MQTT Client with Verified Socket & KeepAlive Settings
+  // 3. Configure MQTT
   client.setServer(mqtt_server, mqtt_port);
   client.setSocketTimeout(5);
   client.setKeepAlive(30);
@@ -286,7 +288,7 @@ void loop() {
       
       sdWriteBufferCount++;
       if (sdWriteBufferCount >= 50) {
-        logFile.flush();
+        logFile.flush(); // Flush buffer to SD card without closing file
         sdWriteBufferCount = 0;
       }
     }
@@ -365,10 +367,11 @@ void loop() {
     Serial.print(" | Total Samples: ");
     Serial.println(sampleCounter);
 
+    // Print Wi-Fi diagnostic if disconnected
     if (WiFi.status() != WL_CONNECTED) {
       printWiFiStatusDiagnostic();
     }
 
-    samplesThisSecond = 0;
+    samplesThisSecond = 0; // Reset rate counter
   }
 }
