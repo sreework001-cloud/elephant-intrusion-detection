@@ -59,7 +59,6 @@ PubSubClient client(espClient);
 
 bool sdOK = false;
 bool rtcOK = false;
-bool mqttOK = false;
 
 File logFile;
 const char* logFilename = "/geophone_log.csv";
@@ -113,14 +112,12 @@ void setupWiFi() {
 }
 
 // 100% NON-BLOCKING MQTT Reconnect
-void reconnectMQTTNonBlocking() {
+void reconnectMQTT() {
   if (WiFi.status() != WL_CONNECTED) {
-    mqttOK = false;
     return;
   }
 
   if (client.connected()) {
-    mqttOK = true;
     return;
   }
 
@@ -136,14 +133,16 @@ void reconnectMQTTNonBlocking() {
     clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
     
     if (client.connect(clientId.c_str())) {
-      mqttOK = true;
       Serial.println("[CONNECTED to MQTT Broker!]");
 
       // Publish test packet immediately upon connection
       const char* testMsg = "{\"node_id\":\"NODE_01\",\"is_hardware\":true,\"status\":\"ONLINE\",\"test\":true}";
-      client.publish(mqtt_topic, testMsg);
+      if (client.publish(mqtt_topic, testMsg)) {
+        Serial.println("[MQTT] Startup Test Packet PUBLISH SUCCESS!");
+      } else {
+        Serial.println("[MQTT] Startup Test Packet PUBLISH FAILED!");
+      }
     } else {
-      mqttOK = false;
       int state = client.state();
       Serial.print("[FAILED, Error Code = ");
       Serial.print(state);
@@ -188,13 +187,12 @@ void initSDCard() {
       }
     }
 
-    // Keep logFile open in append mode for high-speed 200 Hz buffered writing
     logFile = SD.open(logFilename, FILE_APPEND);
     if (!logFile) {
       sdOK = false;
     }
   } else {
-    Serial.println("[SD Card] FAILED - Check: 1. FAT32 Format, 2. Card fully inserted]");
+    Serial.println("[SD Card] FAILED - (Acquisition & MQTT will continue without SD logging)");
   }
 }
 
@@ -292,7 +290,7 @@ void loop() {
       
       sdWriteBufferCount++;
       if (sdWriteBufferCount >= 50) {
-        logFile.flush(); // Flush buffer to SD card without closing file
+        logFile.flush();
         sdWriteBufferCount = 0;
       }
     }
@@ -303,15 +301,12 @@ void loop() {
 
   // Keep Wi-Fi & MQTT connections active without blocking loop
   if (WiFi.status() == WL_CONNECTED) {
-    reconnectMQTTNonBlocking();
+    if (!client.connected()) {
+      reconnectMQTT();
+    }
     if (client.connected()) {
       client.loop();
-      mqttOK = true;
-    } else {
-      mqttOK = false;
     }
-  } else {
-    mqttOK = false;
   }
 
   if (currentMs - lastMqttPublishMs >= MQTT_PUBLISH_INTERVAL_MS) {
@@ -349,14 +344,11 @@ void loop() {
     serializeJson(doc, jsonBuffer);
 
     if (WiFi.status() == WL_CONNECTED && client.connected()) {
-      bool pubSuccess = client.publish(mqtt_topic, jsonBuffer);
-      mqttOK = pubSuccess;
-      if (pubSuccess) {
-        Serial.print("[MQTT 1Hz Publish] SUCCESS -> ");
-        Serial.println(jsonBuffer);
+      if (client.publish(mqtt_topic, jsonBuffer)) {
+        Serial.println("[MQTT] PUBLISH SUCCESS!");
+      } else {
+        Serial.println("[MQTT] PUBLISH FAILED!");
       }
-    } else {
-      mqttOK = false;
     }
 
     // Reset aggregation window
@@ -373,7 +365,7 @@ void loop() {
     Serial.print(" Hz | SD: ");
     Serial.print(sdOK ? "OK" : "ERR");
     Serial.print(" | MQTT: ");
-    Serial.print(mqttOK ? "OK" : "DISC");
+    Serial.print(client.connected() ? "OK" : "DISC");
     Serial.print(" | RTC: ");
     Serial.print(getRTCTimestamp());
     Serial.print(" | Total Samples: ");
