@@ -45,7 +45,7 @@ int SD_CS_PIN = 5; // Auto-scanned at startup
 // --- 3. Sampling & Timing Parameters ---
 const unsigned long SAMPLE_INTERVAL_MICROS = 5000; // 200 Hz = 1 sample every 5000 µs (5ms)
 const unsigned long MQTT_PUBLISH_INTERVAL_MS = 1000; // 1 Hz summary telemetry packet
-const unsigned long MQTT_RETRY_INTERVAL_MS = 3000; // Non-blocking 3s retry for MQTT
+const unsigned long MQTT_RETRY_INTERVAL_MS = 2000; // Non-blocking 2s retry for MQTT
 
 // --- 4. Uncalibrated ADC & Sensitivity Scale Placeholders ---
 const int ADC_BASELINE = 2048; // 12-bit ADC midpoint (3.3V / 2)
@@ -133,11 +133,15 @@ void reconnectMQTTNonBlocking() {
     Serial.print("... ");
 
     String clientId = "ESP32_Geophone_Node01_";
-    clientId += String(random(0xffff), HEX);
+    clientId += String((uint32_t)ESP.getEfuseMac(), HEX);
     
     if (client.connect(clientId.c_str())) {
       mqttOK = true;
       Serial.println("[CONNECTED to MQTT Broker!]");
+
+      // Publish test packet immediately upon connection
+      const char* testMsg = "{\"node_id\":\"NODE_01\",\"is_hardware\":true,\"status\":\"ONLINE\",\"test\":true}";
+      client.publish(mqtt_topic, testMsg);
     } else {
       mqttOK = false;
       int state = client.state();
@@ -302,6 +306,9 @@ void loop() {
     reconnectMQTTNonBlocking();
     if (client.connected()) {
       client.loop();
+      mqttOK = true;
+    } else {
+      mqttOK = false;
     }
   } else {
     mqttOK = false;
@@ -342,7 +349,12 @@ void loop() {
     serializeJson(doc, jsonBuffer);
 
     if (WiFi.status() == WL_CONNECTED && client.connected()) {
-      mqttOK = client.publish(mqtt_topic, jsonBuffer);
+      bool pubSuccess = client.publish(mqtt_topic, jsonBuffer);
+      mqttOK = pubSuccess;
+      if (pubSuccess) {
+        Serial.print("[MQTT 1Hz Publish] SUCCESS -> ");
+        Serial.println(jsonBuffer);
+      }
     } else {
       mqttOK = false;
     }
