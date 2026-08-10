@@ -27,7 +27,7 @@
 #include <SD.h>
 
 // --- 1. Network & Broker Configuration ---
-const char* ssid = "YOUR_WIFI_SSID";          // <-- Replace with Wi-Fi SSID
+const char* ssid = "YOUR_WIFI_SSID";          // <-- Replace with 2.4GHz Wi-Fi or Mobile Hotspot SSID
 const char* password = "YOUR_WIFI_PASSWORD";  // <-- Replace with Wi-Fi Password
 
 const char* mqtt_server = "broker.hivemq.com";
@@ -88,14 +88,29 @@ String getRTCTimestamp() {
   return "1970-01-01 00:00:00"; // Fallback if RTC uninitialized
 }
 
+void printWiFiStatusDiagnostic() {
+  wl_status_t status = WiFi.status();
+  Serial.print("[Wi-Fi Diagnostic] Status Code ");
+  Serial.print(status);
+  Serial.print(": ");
+  switch (status) {
+    case WL_CONNECTED: Serial.println("CONNECTED"); break;
+    case WL_NO_SSID_AVAIL: Serial.println("SSID NOT FOUND (Check Wi-Fi Name or 2.4GHz Band)"); break;
+    case WL_CONNECT_FAILED: Serial.println("CONNECTION FAILED (Check Password)"); break;
+    case WL_WRONG_PASSWORD: Serial.println("WRONG PASSWORD"); break;
+    case WL_DISCONNECTED: Serial.println("DISCONNECTED (Connecting...)"); break;
+    default: Serial.println("IDLE / UNKNOWN"); break;
+  }
+}
+
 void setupWiFi() {
-  Serial.print("[Wi-Fi] Connecting to ");
+  Serial.print("[Wi-Fi] Connecting to SSID: ");
   Serial.println(ssid);
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
 }
 
-// 100% NON-BLOCKING MQTT Reconnect (No delay() to ensure 200 Hz sampling is never interrupted)
+// 100% NON-BLOCKING MQTT Reconnect
 void reconnectMQTTNonBlocking() {
   if (WiFi.status() != WL_CONNECTED) {
     mqttOK = false;
@@ -137,7 +152,7 @@ void initSDCard() {
 
   if (SD.begin(SD_CS_PIN)) {
     sdOK = true;
-    Serial.println("[OK]");
+    Serial.println("[OK - FAT32 Verified]");
     Serial.print("[SD Card] Target Log File: ");
     Serial.println(logFilename);
 
@@ -151,7 +166,7 @@ void initSDCard() {
     }
   } else {
     sdOK = false;
-    Serial.println("[FAILED - Continuing sensor acquisition without SD logging]");
+    Serial.println("[FAILED - Check: 1. FAT32 Format, 2. CS Pin 5 / SPI Wiring, 3. Card Insertion]");
   }
 }
 
@@ -170,7 +185,7 @@ void initRTC() {
     Serial.println(getRTCTimestamp());
   } else {
     rtcOK = false;
-    Serial.println("[FAILED - Defaulting to fallback timestamp]");
+    Serial.println("[FAILED - Check I2C SDA Pin 21, SCL Pin 22]");
   }
 }
 
@@ -325,6 +340,11 @@ void loop() {
     Serial.print(getRTCTimestamp());
     Serial.print(" | Total Samples: ");
     Serial.println(sampleCounter);
+
+    // Print Wi-Fi diagnostic if disconnected
+    if (WiFi.status() != WL_CONNECTED) {
+      printWiFiStatusDiagnostic();
+    }
 
     samplesThisSecond = 0; // Reset rate counter
   }
