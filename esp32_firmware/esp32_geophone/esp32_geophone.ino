@@ -97,9 +97,9 @@ void printWiFiStatusDiagnostic() {
     case WL_CONNECTED: Serial.println("CONNECTED"); break;
     case WL_NO_SSID_AVAIL: Serial.println("SSID NOT FOUND (Check Wi-Fi Name or 2.4GHz Band)"); break;
     case WL_CONNECT_FAILED: Serial.println("CONNECTION FAILED (Check Password)"); break;
-    case WL_WRONG_PASSWORD: Serial.println("WRONG PASSWORD"); break;
     case WL_DISCONNECTED: Serial.println("DISCONNECTED (Connecting...)"); break;
-    default: Serial.println("IDLE / UNKNOWN"); break;
+    case WL_IDLE_STATUS: Serial.println("IDLE"); break;
+    default: Serial.println("ATTEMPTING CONNECTION"); break;
   }
 }
 
