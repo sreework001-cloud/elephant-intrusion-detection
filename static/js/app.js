@@ -3,7 +3,9 @@
 let ws;
 let canvas, ctx;
 let stftCanvas, stftCtx;
-let maxHistoryPoints = 60;
+const WAVEFORM_RATE_HZ = 200;
+const WAVEFORM_HISTORY_SECONDS = 60;
+const maxHistoryPoints = WAVEFORM_RATE_HZ * WAVEFORM_HISTORY_SECONDS;
 let currentStftNode = "NODE_01";
 let currentStftIntrusion = false;
 let selectedAxisMode = "ALL";
@@ -179,14 +181,26 @@ function handleServerMessage(msg) {
         updateNodeUI(d);
         
         if (triaxialHistory[d.node_id]) {
-            triaxialHistory[d.node_id].x.shift();
-            triaxialHistory[d.node_id].x.push(d.vib_x || d.vibration_val * 0.58);
+            let history = triaxialHistory[d.node_id];
             
-            triaxialHistory[d.node_id].y.shift();
-            triaxialHistory[d.node_id].y.push(d.vib_y || d.vibration_val * 0.52);
-            
-            triaxialHistory[d.node_id].z.shift();
-            triaxialHistory[d.node_id].z.push(d.vib_z || d.vibration_val * 0.63);
+            if (Array.isArray(d.wave_x) && Array.isArray(d.wave_y) && Array.isArray(d.wave_z) && d.wave_x.length > 0) {
+                history.x.push(...d.wave_x);
+                history.y.push(...d.wave_y);
+                history.z.push(...d.wave_z);
+                
+                if (history.x.length > maxHistoryPoints) history.x.splice(0, history.x.length - maxHistoryPoints);
+                if (history.y.length > maxHistoryPoints) history.y.splice(0, history.y.length - maxHistoryPoints);
+                if (history.z.length > maxHistoryPoints) history.z.splice(0, history.z.length - maxHistoryPoints);
+            } else {
+                history.x.shift();
+                history.x.push(d.vib_x || d.vibration_val * 0.58);
+                
+                history.y.shift();
+                history.y.push(d.vib_y || d.vibration_val * 0.52);
+                
+                history.z.shift();
+                history.z.push(d.vib_z || d.vibration_val * 0.63);
+            }
         }
         
         if (msg.alert) {

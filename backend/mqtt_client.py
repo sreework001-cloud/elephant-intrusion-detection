@@ -158,6 +158,18 @@ class MQTTGatewayHandler:
                 eval_result["siren_activated"] = siren_activated
                 alert_data = eval_result
 
+        wave_x = data.get("wave_x", [])
+        wave_y = data.get("wave_y", [])
+        wave_z = data.get("wave_z", [])
+
+        if not isinstance(wave_x, list): wave_x = []
+        if not isinstance(wave_y, list): wave_y = []
+        if not isinstance(wave_z, list): wave_z = []
+
+        wave_x = wave_x[:200]
+        wave_y = wave_y[:200]
+        wave_z = wave_z[:200]
+
         # 3. Broadcast to WebSockets
         if self.broadcast_callback:
             event_packet = {
@@ -182,7 +194,14 @@ class MQTTGatewayHandler:
                     "rssi": rssi,
                     "snr": snr,
                     "status": status,
-                    "timestamp": time.time()
+                    "timestamp": time.time(),
+                    "sample_rate_hz": data.get("sample_rate_hz", 200),
+                    "sample_count": data.get("sample_count", len(wave_x) if wave_x else 200),
+                    "first_sample": data.get("first_sample", 0),
+                    "last_sample": data.get("last_sample", 0),
+                    "wave_x": wave_x,
+                    "wave_y": wave_y,
+                    "wave_z": wave_z
                 },
                 "alert": alert_data
             }
