@@ -62,6 +62,7 @@ async def lifespan(app: FastAPI):
     
     # Hook MQTT broadcast callback to WebSocket manager broadcast
     mqtt_gateway.set_broadcast_callback(manager.broadcast)
+    mqtt_gateway.set_event_loop(asyncio.get_running_loop())
     mqtt_gateway.start()
     
     # Start telemetry simulator
