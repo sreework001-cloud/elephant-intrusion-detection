@@ -19,13 +19,14 @@ class MQTTGatewayHandler:
         self.client = mqtt.Client(client_id="Elephant_Dashboard_Gateway_Receiver")
         self.broadcast_callback: Optional[Callable] = None
         self.is_connected = False
-        
+        self.event_loop = None
         self.hardware_active_nodes: Dict[str, float] = {}
 
         self.client.on_connect = self._on_connect
         self.client.on_message = self._on_message
         self.client.on_disconnect = self._on_disconnect
-
+    def set_event_loop(self, loop):
+        self.event_loop = loop
     def set_broadcast_callback(self, callback: Callable):
         self.broadcast_callback = callback
 
@@ -208,11 +209,13 @@ class MQTTGatewayHandler:
                 "alert": alert_data
             }
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    loop.create_task(self.broadcast_callback(event_packet))
-            except Exception:
-                pass
+                if self.event_loop is not None and self.event_loop.is_running():
+                    asyncio.run_coroutine_threadsafe(
+                        self.broadcast_callback(event_packet),
+                        self.event_loop
+                    )
+            except Exception as e:
+                logger.error(f"WebSocket broadcast failed: {e}")
 
 # Global Singleton
 mqtt_gateway = MQTTGatewayHandler()
