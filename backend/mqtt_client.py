@@ -197,8 +197,10 @@ class MQTTGatewayHandler:
                     "timestamp": time.time(),
                     "sample_rate_hz": data.get("sample_rate_hz", 200),
                     "sample_count": data.get("sample_count", len(wave_x) if wave_x else 200),
-                    "first_sample": data.get("first_sample", 0),
-                    "last_sample": data.get("last_sample", 0),
+                    "sample_start": data.get("sample_start", 0),
+                    "sample_end": data.get("sample_end", 0),
+                    "chunk_id": data.get("chunk_id", 0),
+                    "block_id": data.get("block_id", 0),
                     "wave_x": wave_x,
                     "wave_y": wave_y,
                     "wave_z": wave_z

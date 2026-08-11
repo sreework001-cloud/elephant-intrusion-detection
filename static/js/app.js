@@ -249,7 +249,7 @@ function updateNodeUI(node) {
     const pill = document.getElementById(`pill_${nodeId}`);
     if (pill) {
         if (node.is_hardware) {
-            pill.textContent = "⚡ ESP32 HARDWARE";
+            pill.innerHTML = `⚡ ESP32 HARDWARE <br/><span style='font-size:0.65rem; opacity:0.9;'>REAL-TIME | Rate: ${node.sample_rate_hz || 200} Hz | Block: ${node.block_id || 0} Chunk: ${(node.chunk_id || 0)+1}/4</span>`;
             pill.className = vmag >= 4.0 ? "node-pill alert" : "node-pill online";
             pill.style.background = "rgba(6, 182, 212, 0.25)";
             pill.style.borderColor = "var(--color-cyan)";
@@ -257,9 +257,11 @@ function updateNodeUI(node) {
         } else if (node.status === "ALERT" || vmag >= 4.0) {
             pill.textContent = "ALERT";
             pill.className = "node-pill alert";
+            pill.style = "";
         } else {
-            pill.textContent = "ONLINE";
+            pill.textContent = "ONLINE (SIM)";
             pill.className = "node-pill online";
+            pill.style = "";
         }
     }
     
