@@ -259,14 +259,34 @@
                         <h2>Triaxial Geophone Waveform (mm/s)</h2>
                         <span style="font-size: 0.78rem; color: var(--text-muted);">Live X (E-W), Y (N-S), Z (Vertical) Ground Motion Stream</span>
                     </div>
-                    <div style="display: flex; gap: 0.4rem;">
-                        <button class="axis-btn active" id="axisBtn_ALL" onclick="setAxisMode('ALL')">All Axes</button>
-                        <button class="axis-btn" id="axisBtn_X" onclick="setAxisMode('X')" style="border-color:#EF4444; color:#EF4444;">X-Axis</button>
-                        <button class="axis-btn" id="axisBtn_Y" onclick="setAxisMode('Y')" style="border-color:#10B981; color:#10B981;">Y-Axis</button>
-                        <button class="axis-btn" id="axisBtn_Z" onclick="setAxisMode('Z')" style="border-color:#06B6D4; color:#06B6D4;">Z-Axis</button>
+                    <div class="waveform-controls">
+                        <label class="axis-check x-axis">
+                            <input type="checkbox" id="axisCheck_X" checked onchange="toggleAxis('X', this.checked)">
+                            <span class="checkmark">✓</span>
+                            <span>X</span>
+                        </label>
+                        <label class="axis-check y-axis">
+                            <input type="checkbox" id="axisCheck_Y" checked onchange="toggleAxis('Y', this.checked)">
+                            <span class="checkmark">✓</span>
+                            <span>Y</span>
+                        </label>
+                        <label class="axis-check z-axis">
+                            <input type="checkbox" id="axisCheck_Z" checked onchange="toggleAxis('Z', this.checked)">
+                            <span class="checkmark">✓</span>
+                            <span>Z</span>
+                        </label>
+
+                        <span class="waveform-divider"></span>
+
+                        <span class="waveform-live">
+                            <span class="live-dot"></span>
+                            LIVE
+                        </span>
                     </div>
+                                
                 </div>
                 <canvas id="vibrationCanvas"></canvas>
+                    
             </div>
 
             <!-- Triangular Compass TDOA Map -->
