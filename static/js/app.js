@@ -8,7 +8,11 @@ const WAVEFORM_HISTORY_SECONDS = 60;
 const maxHistoryPoints = WAVEFORM_RATE_HZ * WAVEFORM_HISTORY_SECONDS;
 let currentStftNode = "NODE_01";
 let currentStftIntrusion = false;
-let selectedAxisMode = "ALL";
+let axisVisibility = {
+    X: true,
+    Y: true,
+    Z: true
+};
 
 let triaxialHistory = {
     "NODE_01": { x: new Array(maxHistoryPoints).fill(0.18), y: new Array(maxHistoryPoints).fill(0.15), z: new Array(maxHistoryPoints).fill(0.22) },
@@ -21,15 +25,15 @@ document.addEventListener("DOMContentLoaded", () => {
     initWebSocket();
 });
 
-function setAxisMode(mode) {
-    selectedAxisMode = mode;
-    ["ALL", "X", "Y", "Z"].forEach(m => {
-        const btn = document.getElementById(`axisBtn_${m}`);
-        if (btn) {
-            if (m === mode) btn.classList.add("active");
-            else btn.classList.remove("active");
-        }
-    });
+function toggleAxis(axis, visible) {
+    axisVisibility[axis] = visible;
+
+    const checkbox = document.getElementById(`axisCheck_${axis}`);
+    const control = checkbox ? checkbox.closest(".axis-check") : null;
+
+    if (control) {
+        control.classList.toggle("disabled", !visible);
+    }
 }
 
 function initCanvas() {
@@ -51,85 +55,337 @@ function initCanvas() {
 
 function renderWaveform() {
     if (!ctx || !canvas) return;
-    
-    const w = canvas.width;
-    const h = canvas.height;
-    const paddingLeft = 45;
-    const paddingBottom = 25;
-    const graphW = w - paddingLeft;
-    const graphH = h - paddingBottom;
-    
+
+    const rect = canvas.getBoundingClientRect();
+
+    if (rect.width <= 0 || rect.height <= 0) {
+        requestAnimationFrame(renderWaveform);
+        return;
+    }
+
+    // Keep canvas resolution synchronized with displayed size
+    const dpr = window.devicePixelRatio || 1;
+
+    if (
+        canvas.width !== Math.floor(rect.width * dpr) ||
+        canvas.height !== Math.floor(rect.height * dpr)
+    ) {
+        canvas.width = Math.floor(rect.width * dpr);
+        canvas.height = Math.floor(rect.height * dpr);
+
+        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
+
+    const w = rect.width;
+    const h = rect.height;
+
+    // ---------------------------------------------------------
+    // GRAPH LAYOUT
+    // ---------------------------------------------------------
+
+    const padding = {
+        left: 58,
+        right: 18,
+        top: 18,
+        bottom: 38
+    };
+
+    const graphLeft = padding.left;
+    const graphRight = w - padding.right;
+    const graphTop = padding.top;
+    const graphBottom = h - padding.bottom;
+
+    const graphWidth = graphRight - graphLeft;
+    const graphHeight = graphBottom - graphTop;
+
+    // Signed vibration range.
+    // This allows the waveform to move around zero instead
+    // of being forced into a positive-only 0-10 mm/s graph.
+    const Y_MIN = -15;
+    const Y_MAX = 10;
+
+    // ---------------------------------------------------------
+    // CLEAR
+    // ---------------------------------------------------------
+
     ctx.clearRect(0, 0, w, h);
-    
-    // Background Grid & Y-Axis Scale Markings (0 to 10 mm/s)
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.05)";
+
+    // ---------------------------------------------------------
+    // BACKGROUND
+    // ---------------------------------------------------------
+
+    ctx.fillStyle = "#12191d";
+    ctx.fillRect(
+        graphLeft,
+        graphTop,
+        graphWidth,
+        graphHeight
+    );
+
+    // ---------------------------------------------------------
+    // GRID
+    // ---------------------------------------------------------
+
     ctx.lineWidth = 1;
-    ctx.fillStyle = "rgba(255, 255, 255, 0.4)";
-    ctx.font = "10px Inter";
-    
-    for (let amp = 0; amp <= 10; amp += 2) {
-        const y = graphH - (amp / 10.0) * graphH;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+
+    const yTicks = [-15, -10, -5, 0, 5, 10];
+
+    yTicks.forEach(value => {
+
+        const y =
+            graphBottom -
+            ((value - Y_MIN) / (Y_MAX - Y_MIN)) *
+            graphHeight;
+
         ctx.beginPath();
-        ctx.moveTo(paddingLeft, y);
-        ctx.lineTo(w, y);
+        ctx.moveTo(graphLeft, y);
+        ctx.lineTo(graphRight, y);
         ctx.stroke();
-        
-        ctx.fillText(`${amp} mm/s`, 5, y + 3);
-    }
-    
-    // X-Axis Time Scale Markings (-60s to 0s Live)
-    const timeLabels = ["-60s", "-45s", "-30s", "-15s", "0s (Live)"];
-    const stepX = graphW / (timeLabels.length - 1);
-    for (let i = 0; i < timeLabels.length; i++) {
-        const x = paddingLeft + i * stepX;
+    });
+
+    // Vertical time grid
+    const verticalLines = 5;
+
+    for (let i = 0; i <= verticalLines; i++) {
+
+        const x =
+            graphLeft +
+            (i / verticalLines) * graphWidth;
+
         ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, graphH);
+        ctx.moveTo(x, graphTop);
+        ctx.lineTo(x, graphBottom);
         ctx.stroke();
-        
-        ctx.fillText(timeLabels[i], x - 15, h - 5);
     }
-    
-    // Alarm threshold line at 4.0 mm/s
-    const thresholdY = graphH - (4.0 / 10.0) * graphH;
-    ctx.strokeStyle = "rgba(239, 68, 68, 0.5)";
-    ctx.setLineDash([6, 6]);
+
+    // ---------------------------------------------------------
+    // ZERO LINE
+    // ---------------------------------------------------------
+
+    const zeroY =
+        graphBottom -
+        ((0 - Y_MIN) / (Y_MAX - Y_MIN)) *
+        graphHeight;
+
+    ctx.strokeStyle = "rgba(255,255,255,0.20)";
+    ctx.lineWidth = 1.2;
+
     ctx.beginPath();
-    ctx.moveTo(paddingLeft, thresholdY);
-    ctx.lineTo(w, thresholdY);
+    ctx.moveTo(graphLeft, zeroY);
+    ctx.lineTo(graphRight, zeroY);
     ctx.stroke();
-    ctx.setLineDash([]);
-    ctx.fillStyle = "rgba(239, 68, 68, 0.7)";
-    ctx.fillText("ALARM THRESHOLD (4.0 mm/s)", paddingLeft + 10, thresholdY - 6);
+
+    // ---------------------------------------------------------
+    // AXIS LABELS
+    // ---------------------------------------------------------
+
+    ctx.font = "12px Inter, Arial, sans-serif";
+    ctx.fillStyle = "rgba(220,230,235,0.75)";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+
+    yTicks.forEach(value => {
+
+        const y =
+            graphBottom -
+            ((value - Y_MIN) / (Y_MAX - Y_MIN)) *
+            graphHeight;
+
+        ctx.fillText(
+            `${value}`,
+            graphLeft - 10,
+            y
+        );
+    });
+
+    // Unit label
+    ctx.save();
+
+    ctx.translate(14, graphTop + graphHeight / 2);
+    ctx.rotate(-Math.PI / 2);
+
+    ctx.textAlign = "center";
+    ctx.fillStyle = "rgba(220,230,235,0.65)";
+    ctx.font = "11px Inter, Arial, sans-serif";
+
+    ctx.fillText(
+        "Velocity (mm/s)",
+        0,
+        0
+    );
+
+    ctx.restore();
+
+    // ---------------------------------------------------------
+    // TIME LABELS
+    // ---------------------------------------------------------
+
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+    ctx.fillStyle = "rgba(220,230,235,0.65)";
+    ctx.font = "11px Inter, Arial, sans-serif";
+
+    const timeLabels = [
+        "-10 s",
+        "-7.5 s",
+        "-5 s",
+        "-2.5 s",
+        "0 s"
+    ];
+
+    timeLabels.forEach((label, index) => {
+
+        const x =
+            graphLeft +
+            (index / (timeLabels.length - 1)) *
+            graphWidth;
+
+        ctx.fillText(
+            label,
+            x,
+            graphBottom + 12
+        );
+    });
+
+    // ---------------------------------------------------------
+    // ACTIVE NODE
+    // ---------------------------------------------------------
 
     const activeNode = "NODE_01";
     const history = triaxialHistory[activeNode];
-    
-    if (history) {
-        const drawTrace = (dataArray, color, width = 2) => {
-            ctx.strokeStyle = color;
-            ctx.lineWidth = width;
-            ctx.beginPath();
-            const step = graphW / (maxHistoryPoints - 1);
-            for (let i = 0; i < dataArray.length; i++) {
-                const val = dataArray[i];
-                const x = paddingLeft + i * step;
-                const y = graphH - (Math.min(val, 10.0) / 10.0) * graphH;
-                if (i === 0) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
-            }
-            ctx.stroke();
-        };
 
-        if (selectedAxisMode === "ALL" || selectedAxisMode === "X") drawTrace(history.x, "#EF4444", 2);
-        if (selectedAxisMode === "ALL" || selectedAxisMode === "Y") drawTrace(history.y, "#10B981", 2);
-        if (selectedAxisMode === "ALL" || selectedAxisMode === "Z") drawTrace(history.z, "#06B6D4", 2);
-        if (selectedAxisMode === "ALL") {
-            const magArray = history.x.map((xVal, idx) => Math.sqrt(xVal**2 + history.y[idx]**2 + history.z[idx]**2));
-            drawTrace(magArray, "#FFFFFF", 2.5);
-        }
+    if (!history) {
+        requestAnimationFrame(renderWaveform);
+        return;
     }
-    
+
+    // ---------------------------------------------------------
+    // DRAW WAVEFORM
+    // ---------------------------------------------------------
+
+    function drawTrace(dataArray, lineColor, lineWidth = 1.2) {
+
+        if (!Array.isArray(dataArray) || dataArray.length < 2) {
+            return;
+        }
+
+        /*
+         * The dashboard may contain up to 12,000 points
+         * because the acquisition rate is 200 Hz.
+         *
+         * Drawing every point is unnecessary for the screen.
+         * We therefore downsample only for DISPLAY.
+         *
+         * Original data remains untouched.
+         */
+
+        const displayPoints = Math.min(
+            dataArray.length,
+            1000
+        );
+
+        const startIndex =
+            Math.max(
+                0,
+                dataArray.length - displayPoints
+            );
+
+        const samples =
+            dataArray.slice(startIndex);
+
+        if (samples.length < 2) {
+            return;
+        }
+
+        ctx.strokeStyle = lineColor;
+        ctx.lineWidth = lineWidth;
+        ctx.lineJoin = "round";
+        ctx.lineCap = "round";
+
+        ctx.beginPath();
+
+        for (let i = 0; i < samples.length; i++) {
+
+            let value = Number(samples[i]);
+
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+
+            // Prevent extreme values from destroying the scale
+            value = Math.max(
+                Y_MIN,
+                Math.min(Y_MAX, value)
+            );
+
+            const x =
+                graphLeft +
+                (i / (samples.length - 1)) *
+                graphWidth;
+
+            const y =
+                graphBottom -
+                ((value - Y_MIN) / (Y_MAX - Y_MIN)) *
+                graphHeight;
+
+            if (i === 0) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
+            }
+        }
+
+        ctx.stroke();
+    }
+
+    // X-axis
+    if (axisVisibility.X) {
+        drawTrace(
+            history.x,
+            "#2F80ED",
+            1.3
+        );
+    }
+
+    // Y-axis
+    if (axisVisibility.Y) {
+        drawTrace(
+            history.y,
+            "#F2994A",
+            1.3
+        );
+    }
+
+    // Z-axis
+    if (axisVisibility.Z) {
+        drawTrace(
+            history.z,
+            "#10B981",
+            1.3
+        );
+    }
+
+    // ---------------------------------------------------------
+    // LIVE INDICATOR
+    // ---------------------------------------------------------
+
+    ctx.textAlign = "right";
+    ctx.textBaseline = "top";
+    ctx.font = "11px Inter, Arial, sans-serif";
+
+    ctx.fillStyle = "rgba(16,185,129,0.9)";
+
+    ctx.fillText(
+        "● LIVE • 200 Hz",
+        graphRight,
+        graphTop + 4
+    );
+
+    // ---------------------------------------------------------
+    // CONTINUE ANIMATION
+    // ---------------------------------------------------------
+
     requestAnimationFrame(renderWaveform);
 }
 
