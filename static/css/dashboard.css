@@ -1122,3 +1122,19 @@ tr.clickable-row:hover {
     background: linear-gradient(180deg, #FFFFFF, #F59E0B, #EF4444, #8B5CF6, #06B6D4, #050811);
     border: 1px solid rgba(255, 255, 255, 0.1);
 }
+.waveform-canvas-wrapper {
+    width: 100%;
+    height: 360px;
+    position: relative;
+    overflow: hidden;
+}
+
+#vibrationCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    background: #10171B;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.06);
+    box-sizing: border-box;
+}
