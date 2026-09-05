@@ -536,13 +536,203 @@ tr.clickable-row:hover {
     color: var(--color-emerald);
 }
 
-/* Canvas styling */
+/* =========================================================
+   TRIXIAL WAVEFORM
+   Oscilloscope / Serial Plotter Style
+   ========================================================= */
+
 #vibrationCanvas {
     width: 100%;
-    height: 250px;
-    background: rgba(0, 0, 0, 0.3);
+    height: 360px;
+    display: block;
+
+    background: #12191d;
+
     border-radius: 12px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+
+    border: 1px solid rgba(255, 255, 255, 0.06);
+
+    box-sizing: border-box;
+}
+
+
+/* =========================================================
+   WAVEFORM CONTROLS
+   ========================================================= */
+
+.waveform-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.9rem;
+    flex-wrap: wrap;
+}
+
+
+/* Axis checkbox */
+
+.axis-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+
+    font-size: 0.9rem;
+    font-weight: 600;
+
+    cursor: pointer;
+
+    user-select: none;
+
+    transition: opacity 0.2s ease;
+}
+
+.axis-check input {
+    display: none;
+}
+
+
+/* Checkbox square */
+
+.axis-check .checkmark {
+    width: 20px;
+    height: 20px;
+
+    border-radius: 4px;
+
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+
+    font-size: 13px;
+    font-weight: 800;
+
+    color: white;
+
+    border: 1px solid rgba(255,255,255,0.2);
+
+    transition: all 0.2s ease;
+}
+
+
+/* X axis */
+
+.axis-check.x-axis {
+    color: #2F80ED;
+}
+
+.axis-check.x-axis .checkmark {
+    background: #2F80ED;
+    border-color: #2F80ED;
+}
+
+
+/* Y axis */
+
+.axis-check.y-axis {
+    color: #F2994A;
+}
+
+.axis-check.y-axis .checkmark {
+    background: #F2994A;
+    border-color: #F2994A;
+}
+
+
+/* Z axis */
+
+.axis-check.z-axis {
+    color: #10B981;
+}
+
+.axis-check.z-axis .checkmark {
+    background: #10B981;
+    border-color: #10B981;
+}
+
+
+/* Disabled axis */
+
+.axis-check.disabled {
+    opacity: 0.35;
+}
+
+.axis-check.disabled .checkmark {
+    background: transparent;
+    border-color: rgba(255,255,255,0.25);
+}
+
+.axis-check.disabled .checkmark {
+    color: transparent;
+}
+
+
+/* Divider */
+
+.waveform-divider {
+    width: 1px;
+    height: 24px;
+
+    background: rgba(255,255,255,0.12);
+
+    margin: 0 0.2rem;
+}
+
+
+/* Live indicator */
+
+.waveform-live {
+    display: inline-flex;
+    align-items: center;
+
+    gap: 0.4rem;
+
+    font-size: 0.75rem;
+    font-weight: 700;
+
+    color: var(--text-muted);
+
+    letter-spacing: 0.04em;
+}
+
+.live-dot {
+    width: 7px;
+    height: 7px;
+
+    border-radius: 50%;
+
+    background: var(--color-emerald);
+
+    box-shadow:
+        0 0 8px rgba(16,185,129,0.8);
+
+    animation: waveform-live-pulse 1.4s infinite;
+}
+
+@keyframes waveform-live-pulse {
+    0%, 100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0.35;
+    }
+}
+
+
+/* Mobile */
+
+@media (max-width: 768px) {
+
+    #vibrationCanvas {
+        height: 300px;
+    }
+
+    .waveform-controls {
+        gap: 0.55rem;
+    }
+
+    .waveform-divider {
+        display: none;
+    }
 }
 
 /* STFT Modal Styling */
