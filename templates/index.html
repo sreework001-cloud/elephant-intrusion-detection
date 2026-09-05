@@ -260,34 +260,41 @@
                         <span style="font-size: 0.78rem; color: var(--text-muted);">Live X (E-W), Y (N-S), Z (Vertical) Ground Motion Stream</span>
                     </div>
                     <div class="waveform-controls">
-                        <label class="axis-check x-axis">
-                            <input type="checkbox" id="axisCheck_X" checked onchange="toggleAxis('X', this.checked)">
-                            <span class="checkmark">✓</span>
-                            <span>X</span>
-                        </label>
-                        <label class="axis-check y-axis">
-                            <input type="checkbox" id="axisCheck_Y" checked onchange="toggleAxis('Y', this.checked)">
-                            <span class="checkmark">✓</span>
-                            <span>Y</span>
-                        </label>
-                        <label class="axis-check z-axis">
-                            <input type="checkbox" id="axisCheck_Z" checked onchange="toggleAxis('Z', this.checked)">
-                            <span class="checkmark">✓</span>
-                            <span>Z</span>
-                        </label>
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-x active"
+                            id="axisBtn_X"
+                            onclick="toggleAxisButton('X')">
+                            <span class="axis-indicator"></span>
+                            X
+                        </button>
+
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-y active"
+                            id="axisBtn_Y"
+                            onclick="toggleAxisButton('Y')">
+                            <span class="axis-indicator"></span>
+                            Y
+                        </button>
+
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-z active"
+                            id="axisBtn_Z"
+                            onclick="toggleAxisButton('Z')">
+                            <span class="axis-indicator"></span>
+                            Z
+                        </button>
 
                         <span class="waveform-divider"></span>
-
-                        <span class="waveform-live">
+                        <span class"waveform-live">
                             <span class="live-dot"></span>
                             LIVE
                         </span>
+
+                        
                     </div>
-                                
-                </div>
-                <canvas id="vibrationCanvas"></canvas>
-                    
-            </div>
 
             <!-- Triangular Compass TDOA Map -->
             <div class="glass-card">
