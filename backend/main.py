@@ -48,7 +48,7 @@ class ConnectionManager:
                 await connection.send_json(message)
             except Exception:
                 to_remove.append(connection)
-        
+
         for conn in to_remove:
             self.disconnect(conn)
 
@@ -59,17 +59,17 @@ async def lifespan(app: FastAPI):
     # Startup logic
     logger.info("Initializing Elephant Intrusion Detection System Backend...")
     init_db()
-    
+
     # Hook MQTT broadcast callback to WebSocket manager broadcast
     mqtt_gateway.set_broadcast_callback(manager.broadcast)
     mqtt_gateway.set_event_loop(asyncio.get_running_loop())
     mqtt_gateway.start()
-    
+
     # Start telemetry simulator
     await simulator.start()
-    
+
     yield
-    
+
     # Shutdown logic
     logger.info("Shutting down backend services...")
     await simulator.stop()
@@ -84,7 +84,7 @@ templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 # --- Page Routes ---
 @app.get("/", response_class=HTMLResponse)
 async def get_dashboard(request: Request):
-    return templates.TemplateResponse(request=request, name="index.html")
+    return templates.TemplateResponse(request=request, name="maintenance.html")
 
 # --- REST API Endpoints ---
 @app.get("/api/nodes")
@@ -126,7 +126,7 @@ async def websocket_endpoint(websocket: WebSocket):
             "recent_alerts": get_recent_alerts(10)
         }
         await websocket.send_json(initial_data)
-        
+
         while True:
             # Keep connection alive and listen for client messages if any
             data = await websocket.receive_text()
