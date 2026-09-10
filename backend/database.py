@@ -12,6 +12,14 @@ def get_db():
     return conn
 
 
+def _ensure_column(cursor, table: str, column: str, definition: str):
+    """Add a missing column without destroying existing prototype data."""
+    cursor.execute(f"PRAGMA table_info({table})")
+    existing = {row[1] for row in cursor.fetchall()}
+    if column not in existing:
+        cursor.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+
 def init_db():
     conn = get_db()
     cursor = conn.cursor()
@@ -22,9 +30,9 @@ def init_db():
         node_id TEXT PRIMARY KEY,
         name TEXT NOT NULL,
         location TEXT NOT NULL,
-        status TEXT NOT NULL DEFAULT 'ONLINE',
+        status TEXT NOT NULL DEFAULT 'OFFLINE',
         battery REAL NOT NULL DEFAULT 100.0,
-        rssi INTEGER NOT NULL DEFAULT -68,
+        rssi INTEGER NOT NULL DEFAULT 0,
         snr REAL NOT NULL DEFAULT 0.0,
         last_seen REAL NOT NULL,
         vibration_threshold REAL DEFAULT 4.5,
@@ -35,8 +43,7 @@ def init_db():
     )
     """)
 
-    # The old prototype stored a 3-node triangular fusion model. The current
-    # demo has two geophone nodes, so remove the obsolete third node.
+    # Remove only obsolete third-node metadata. Do not recreate the table.
     cursor.execute("DELETE FROM nodes WHERE node_id NOT IN ('NODE_01', 'NODE_02')")
 
     now = time.time()
@@ -81,13 +88,9 @@ def init_db():
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     """, initial_nodes)
 
-    # Telemetry and alert tables are recreated to keep the prototype schema
-    # deterministic while the dashboard data model is being developed.
-    cursor.execute("DROP TABLE IF EXISTS telemetry")
-    cursor.execute("DROP TABLE IF EXISTS alerts")
-
+    # Preserve telemetry/event history across application restarts.
     cursor.execute("""
-    CREATE TABLE alerts (
+    CREATE TABLE IF NOT EXISTS alerts (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp REAL NOT NULL,
         trigger_nodes TEXT NOT NULL,
@@ -109,7 +112,7 @@ def init_db():
     """)
 
     cursor.execute("""
-    CREATE TABLE telemetry (
+    CREATE TABLE IF NOT EXISTS telemetry (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         timestamp REAL NOT NULL,
         node_id TEXT NOT NULL,
@@ -129,6 +132,31 @@ def init_db():
     )
     """)
 
+    # Migrate older prototype alert tables in place if they already exist.
+    alert_columns = [
+        ("classification", "TEXT"),
+        ("event_status", "TEXT"),
+        ("detected_node", "TEXT"),
+        ("dominant_frequency", "REAL"),
+        ("rms", "REAL"),
+        ("location", "TEXT"),
+        ("tdoa_ms", "REAL"),
+        ("mic_verified", "INTEGER NOT NULL DEFAULT 0"),
+        ("pir_verified", "INTEGER NOT NULL DEFAULT 0"),
+        ("siren_activated", "INTEGER NOT NULL DEFAULT 0"),
+        ("details", "TEXT"),
+    ]
+    for column, definition in alert_columns:
+        _ensure_column(cursor, "alerts", column, definition)
+
+    telemetry_columns = [
+        ("snr", "REAL"),
+    ]
+    for column, definition in telemetry_columns:
+        _ensure_column(cursor, "telemetry", column, definition)
+
+    # Keep only the two supported node records. Historical telemetry/events
+    # are retained because they are useful for the event-history display.
     conn.commit()
     conn.close()
 
@@ -136,7 +164,9 @@ def init_db():
 def get_all_nodes() -> List[Dict[str, Any]]:
     conn = get_db()
     cursor = conn.cursor()
-    cursor.execute("SELECT * FROM nodes WHERE node_id IN ('NODE_01', 'NODE_02') ORDER BY node_id ASC")
+    cursor.execute(
+        "SELECT * FROM nodes WHERE node_id IN ('NODE_01', 'NODE_02') ORDER BY node_id ASC"
+    )
     rows = cursor.fetchall()
     conn.close()
     return [dict(row) for row in rows]
