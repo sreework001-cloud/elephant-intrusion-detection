@@ -1,119 +1,173 @@
-import time
-import random
 import asyncio
 import logging
-from typing import Callable, Optional
+import math
+import random
+from typing import Optional
 
 from backend.mqtt_client import mqtt_gateway
 
 logger = logging.getLogger("TelemetrySimulator")
 
+SAMPLE_RATE_HZ = 200
+
+
 class NodeSimulator:
     def __init__(self):
         self.is_running = False
-        self.nodes = ["NODE_01", "NODE_02", "NODE_03"]
-        self.batteries = {"NODE_01": 95.4, "NODE_02": 89.2, "NODE_03": 92.1}
+        self.nodes = ["NODE_01", "NODE_02"]
+        self.batteries = {"NODE_01": 95.0, "NODE_02": 90.0}
         self.simulation_task: Optional[asyncio.Task] = None
 
     async def start(self):
         if self.is_running:
             return
         self.is_running = True
-        logger.info("Triangular TDOA Multimodal System Simulator started.")
+        logger.info("Two-node dashboard simulator started.")
         self.simulation_task = asyncio.create_task(self._simulation_loop())
 
     async def stop(self):
         self.is_running = False
         if self.simulation_task:
             self.simulation_task.cancel()
-            logger.info("Triangular TDOA Multimodal System Simulator stopped.")
+            try:
+                await self.simulation_task
+            except asyncio.CancelledError:
+                pass
+            self.simulation_task = None
+        logger.info("Two-node dashboard simulator stopped.")
+
+    @staticmethod
+    def _make_waveform(vx, vy, vz, dominant_frequency, event=False):
+        samples = []
+        x_wave = []
+        y_wave = []
+        z_wave = []
+
+        for i in range(SAMPLE_RATE_HZ):
+            t = i / SAMPLE_RATE_HZ
+            noise = random.uniform(-0.05, 0.05)
+            envelope = 1.0
+            if event:
+                envelope = 0.45 + 0.55 * math.exp(-((t - 0.55) ** 2) / 0.08)
+
+            x_wave.append(round((vx * envelope * math.sin(2 * math.pi * dominant_frequency * t)) + noise, 4))
+            y_wave.append(round((vy * envelope * math.cos(2 * math.pi * dominant_frequency * t + 0.4)) + noise, 4))
+            z_wave.append(round((vz * envelope * math.sin(2 * math.pi * dominant_frequency * t + 1.0)) + noise, 4))
+
+        return x_wave, y_wave, z_wave
 
     async def _simulation_loop(self):
         while self.is_running:
             try:
                 for node_id in self.nodes:
-                    # CRITICAL: If physical hardware (ESP32) is actively sending telemetry for node_id, SKIP simulator overwrite!
                     if mqtt_gateway.is_hardware_active(node_id):
-                        # Do not overwrite live ESP32 hardware telemetry for this node
                         continue
 
-                    # Triaxial Ambient noise (Horizontal X, Horizontal Y, Vertical Z in mm/s)
-                    vx = round(random.uniform(0.08, 0.35), 2)
-                    vy = round(random.uniform(0.06, 0.30), 2)
-                    vz = round(random.uniform(0.10, 0.42), 2)
-                    mic = round(random.uniform(0.05, 0.35), 2)
-                    
-                    self.batteries[node_id] = max(10.0, round(self.batteries[node_id] - 0.005, 2))
-                    
+                    vx = round(random.uniform(0.08, 0.35), 3)
+                    vy = round(random.uniform(0.06, 0.30), 3)
+                    vz = round(random.uniform(0.10, 0.42), 3)
+                    f_dom = round(random.uniform(1.2, 4.5), 1)
+                    wave_x, wave_y, wave_z = self._make_waveform(vx, vy, vz, f_dom, event=False)
+
+                    self.batteries[node_id] = max(
+                        10.0,
+                        round(self.batteries[node_id] - 0.001, 2),
+                    )
+
                     packet = {
                         "node_id": node_id,
                         "is_hardware": False,
+                        "sample_rate_hz": SAMPLE_RATE_HZ,
+                        "sample_count": SAMPLE_RATE_HZ,
                         "vib_x": vx,
                         "vib_y": vy,
                         "vib_z": vz,
-                        "f_dom": round(random.uniform(1.2, 4.5), 1),
-                        "rms": round(random.uniform(0.1, 0.4), 2),
-                        "kurtosis": round(random.uniform(2.1, 3.1), 1),
-                        "duration": round(random.uniform(0.2, 0.6), 1),
-                        "mic_val": mic,
-                        "mic_verified": False,
-                        "pir_active": False,
-                        "confidence": 0,
+                        "vibration_val": round(math.sqrt(vx**2 + vy**2 + vz**2), 3),
+                        "f_dom": f_dom,
+                        "rms": round(random.uniform(0.08, 0.30), 3),
+                        "kurtosis": round(random.uniform(2.1, 3.1), 2),
+                        "duration": round(random.uniform(0.2, 0.6), 2),
                         "battery": self.batteries[node_id],
                         "rssi": random.randint(-72, -60),
                         "snr": round(random.uniform(9.0, 11.8), 1),
-                        "status": "ONLINE"
+                        "status": "ONLINE",
+                        "waveform_mode": "SIMULATED CONTINUOUS",
+                        "wave_x": wave_x,
+                        "wave_y": wave_y,
+                        "wave_z": wave_z,
+                        "raspberry_pi_status": "SIMULATED",
+                        "lora_gateway_status": "SIMULATED",
+                        "backhaul_4g_status": "SIMULATED",
                     }
-                    
+
                     mqtt_gateway.process_node_packet(packet)
-                    await asyncio.sleep(1.2)
+                    await asyncio.sleep(0.6)
             except asyncio.CancelledError:
                 break
-            except Exception as e:
-                logger.error(f"Simulator error: {e}")
+            except Exception as exc:
+                logger.error("Simulator error: %s", exc)
                 await asyncio.sleep(2.0)
 
-    async def trigger_simulated_intrusion(self, sequence_type: str = "INBOUND_NW"):
-        """
-        Simulate elephant movement sequence across the Triangular Sensor Array (G1, G2, G3).
-        TDOA Delays are simulated in milliseconds.
-        """
-        if sequence_type == "INBOUND_NW":
-            seq = [("NODE_01", 3.8, 3.2, 4.9, 18.5, 94), ("NODE_02", 4.2, 3.6, 5.4, 19.2, 96), ("NODE_03", 3.5, 3.0, 4.2, 17.8, 90)]
-        elif sequence_type == "INBOUND_NE":
-            seq = [("NODE_01", 4.0, 3.4, 5.1, 18.8, 94), ("NODE_03", 4.5, 3.9, 5.8, 20.1, 97), ("NODE_02", 3.4, 2.9, 4.1, 17.5, 89)]
-        elif sequence_type == "OUTBOUND":
-            seq = [("NODE_02", 3.8, 3.2, 4.6, 19.0, 88), ("NODE_03", 3.6, 3.1, 4.3, 18.5, 86), ("NODE_01", 3.1, 2.6, 3.8, 18.0, 92)]
+    async def trigger_simulated_intrusion(self, sequence_type: str = "INBOUND"):
+        """Simulate a Raspberry-Pi decision across the two demo nodes."""
+        if sequence_type == "OUTBOUND":
+            seq = [
+                ("NODE_02", 1.8, 1.5, 2.2, 17.0, 88),
+                ("NODE_01", 1.4, 1.2, 1.8, 15.5, 84),
+            ]
+            direction = "G2 → G1 (SIMULATED)"
         else:
-            seq = [("NODE_02", 4.5, 4.0, 5.8, 21.0, 98), ("NODE_03", 4.3, 3.8, 5.5, 20.5, 96), ("NODE_01", 3.2, 2.7, 4.0, 18.0, 91)]
+            seq = [
+                ("NODE_01", 3.0, 2.6, 4.0, 18.5, 94),
+                ("NODE_02", 3.5, 3.0, 4.6, 19.2, 96),
+            ]
+            direction = "G1 → G2 (SIMULATED)"
 
-        for node_id, vx, vy, vz, fdom, conf in seq:
-            # If node_id is receiving live ESP32 hardware data, don't inject simulated sequence into that specific node
+        for index, (node_id, vx, vy, vz, fdom, conf) in enumerate(seq):
             if mqtt_gateway.is_hardware_active(node_id):
                 continue
 
-            total_vib = round((vx**2 + vy**2 + vz**2)**0.5, 2)
+            wave_x, wave_y, wave_z = self._make_waveform(vx, vy, vz, fdom, event=True)
+            total_vib = round(math.sqrt(vx**2 + vy**2 + vz**2), 3)
+
             packet = {
                 "node_id": node_id,
                 "is_hardware": False,
+                "sample_rate_hz": SAMPLE_RATE_HZ,
+                "sample_count": SAMPLE_RATE_HZ,
                 "vib_x": vx,
                 "vib_y": vy,
                 "vib_z": vz,
+                "vibration_val": total_vib,
                 "f_dom": fdom,
-                "rms": round(total_vib * 0.707, 2),
-                "kurtosis": round(random.uniform(5.2, 6.8), 1),
-                "duration": round(random.uniform(2.2, 3.6), 1),
-                "mic_val": round(total_vib * 0.8, 2),
-                "mic_verified": True,
-                "pir_active": True,
-                "confidence": conf,
+                "rms": round(total_vib * 0.707, 3),
+                "kurtosis": round(random.uniform(5.2, 6.8), 2),
+                "duration": round(random.uniform(2.2, 3.6), 2),
                 "battery": self.batteries[node_id],
                 "rssi": random.randint(-68, -56),
                 "snr": round(random.uniform(10.5, 12.5), 1),
-                "status": "ALERT"
+                "status": "ONLINE",
+                "waveform_mode": "SIMULATED EVENT SNIPPET",
+                "waveform_is_event": True,
+                "wave_x": wave_x,
+                "wave_y": wave_y,
+                "wave_z": wave_z,
+                "classification": "ELEPHANT",
+                "confidence": conf,
+                "event": True,
+                "event_status": "ELEPHANT DETECTED",
+                "detected_node": node_id,
+                "direction": direction,
+                "location": "SIMULATED TWO-NODE EVENT",
+                "details": "Simulated Raspberry Pi classification and alert decision; not a hardware ML result.",
+                "siren_activated": index == len(seq) - 1,
+                "raspberry_pi_status": "SIMULATED",
+                "lora_gateway_status": "SIMULATED",
+                "backhaul_4g_status": "SIMULATED",
             }
-            mqtt_gateway.process_node_packet(packet)
-            await asyncio.sleep(2.5)
 
-# Global Singleton
+            mqtt_gateway.process_node_packet(packet)
+            await asyncio.sleep(1.5)
+
+
 simulator = NodeSimulator()
