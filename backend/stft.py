@@ -1,71 +1,182 @@
 import math
-import random
 import time
-from typing import Dict, Any, List
+from typing import Any, Dict, List
+
+from backend.mqtt_client import get_recent_waveform
+
+
+WINDOW_SIZE = 128
+HOP_SIZE = 64
+MAX_FREQUENCY_HZ = 100.0
+
+
+def _composite_waveform(x: List[float], y: List[float], z: List[float]) -> List[float]:
+    count = min(len(x), len(y), len(z))
+    return [
+        math.sqrt(x[i] ** 2 + y[i] ** 2 + z[i] ** 2)
+        for i in range(count)
+    ]
+
+
+def _dft_power(frame: List[float], sample_rate_hz: float) -> tuple[List[float], List[float]]:
+    n = len(frame)
+    half = n // 2
+    frequencies = []
+    powers = []
+
+    # Hann window. The DC mean is removed before the transform.
+    mean = sum(frame) / n
+    windowed = []
+    for i, value in enumerate(frame):
+        window = 0.5 - 0.5 * math.cos((2.0 * math.pi * i) / (n - 1))
+        windowed.append((value - mean) * window)
+
+    for k in range(half + 1):
+        frequency = (k * sample_rate_hz) / n
+        if frequency > MAX_FREQUENCY_HZ:
+            break
+
+        real = 0.0
+        imag = 0.0
+        for index, value in enumerate(windowed):
+            angle = (2.0 * math.pi * k * index) / n
+            real += value * math.cos(angle)
+            imag -= value * math.sin(angle)
+
+        power = (real * real + imag * imag) / max(1, n * n)
+        frequencies.append(round(frequency, 2))
+        powers.append(power)
+
+    return frequencies, powers
+
 
 def generate_stft_matrix(node_id: str, is_intrusion: bool = False, peak_freq: float = 18.5) -> Dict[str, Any]:
+    """Generate an STFT from waveform samples actually received by the backend.
+
+    ``is_intrusion`` and ``peak_freq`` are retained for API compatibility with
+    the existing dashboard, but they are no longer used to synthesize data.
     """
-    Generates Short-Time Fourier Transform (STFT) spectrogram data matrix.
-    - Frequencies: 0 to 50 Hz (Seismic & Low Frequency Acoustic Band)
-    - Time frames: 50 time steps across 5 seconds window (0.1s resolution)
-    """
-    num_time_frames = 50
-    num_freq_bins = 40  # 0 to 50 Hz, step ~1.25 Hz
-    
-    freq_axis = [round(i * (50.0 / num_freq_bins), 1) for i in range(num_freq_bins)]
-    time_axis = [round(i * 0.1, 1) for i in range(num_time_frames)]
-    
-    matrix: List[List[float]] = []
-    
-    # Fundamental elephant seismic footfall frequency range: 14 - 24 Hz
-    target_freq = peak_freq if is_intrusion else 0.0
-    
-    for t_idx in range(num_time_frames):
-        t = time_axis[t_idx]
-        frame_energies = []
-        
-        # Periodic pulse modulation for footsteps (every ~1.2 seconds)
-        footstep_envelope = 1.0
-        if is_intrusion:
-            phase = (t % 1.2) / 1.2
-            footstep_envelope = math.exp(-((phase - 0.3) ** 2) / 0.04) * 3.5 + 0.5
-        
-        for f_idx in range(num_freq_bins):
-            f = freq_axis[f_idx]
-            
-            # Ambient background noise floor (-60 dB to -40 dB)
-            base_noise = random.uniform(0.02, 0.12)
-            
-            # Low frequency earth rumble (0 - 5 Hz)
-            earth_rumble = math.exp(-((f - 2.0) ** 2) / 4.0) * 0.25
-            
-            intensity = base_noise + earth_rumble
-            
-            if is_intrusion and f > 2.0:
-                # Primary elephant seismic footfall peak
-                primary_peak = math.exp(-((f - target_freq) ** 2) / 12.0) * 0.85 * footstep_envelope
-                # 2nd harmonic
-                secondary_peak = math.exp(-((f - (target_freq * 1.8)) ** 2) / 18.0) * 0.4 * footstep_envelope
-                intensity += primary_peak + secondary_peak
-            
-            # Clamp normalized intensity between 0.0 and 1.0
-            intensity = max(0.0, min(1.0, intensity))
-            frame_energies.append(round(intensity, 3))
-            
-        matrix.append(frame_energies)
-        
-    dominant_f = target_freq if is_intrusion else round(random.uniform(1.5, 4.0), 1)
-    max_energy_db = round(20 * math.log10(max(max(row) for row in matrix) + 1e-5) + 60, 1)
+    received = get_recent_waveform(node_id, max_samples=2000)
+
+    if not received:
+        return {
+            "node_id": node_id,
+            "timestamp": time.time(),
+            "available": False,
+            "message": "Waiting for waveform data",
+            "time_axis": [],
+            "freq_axis": [],
+            "stft_matrix": [],
+            "peak_frequency_hz": None,
+            "peak_energy_db": None,
+            "bandwidth_hz": None,
+            "signal_class": "Waiting for waveform data",
+        }
+
+    sample_rate_hz = float(received.get("sample_rate_hz") or 200)
+    waveform = _composite_waveform(
+        received.get("x", []),
+        received.get("y", []),
+        received.get("z", []),
+    )
+
+    if len(waveform) < WINDOW_SIZE:
+        return {
+            "node_id": node_id,
+            "timestamp": time.time(),
+            "available": False,
+            "message": "Waiting for waveform data",
+            "samples_available": len(waveform),
+            "samples_required": WINDOW_SIZE,
+            "time_axis": [],
+            "freq_axis": [],
+            "stft_matrix": [],
+            "peak_frequency_hz": None,
+            "peak_energy_db": None,
+            "bandwidth_hz": None,
+            "signal_class": "Waiting for waveform data",
+        }
+
+    start_index = max(0, len(waveform) - 2000)
+    waveform = waveform[start_index:]
+
+    frames = []
+    time_axis = []
+    global_max_power = 0.0
+    frequency_axis = None
+
+    frame_start = 0
+    while frame_start + WINDOW_SIZE <= len(waveform):
+        frame = waveform[frame_start:frame_start + WINDOW_SIZE]
+        frequencies, powers = _dft_power(frame, sample_rate_hz)
+
+        if frequency_axis is None:
+            frequency_axis = frequencies
+
+        global_max_power = max(global_max_power, max(powers, default=0.0))
+        frames.append(powers)
+        time_axis.append(round((frame_start + WINDOW_SIZE / 2) / sample_rate_hz, 3))
+        frame_start += HOP_SIZE
+
+    if not frames or frequency_axis is None or global_max_power <= 0.0:
+        return {
+            "node_id": node_id,
+            "timestamp": time.time(),
+            "available": False,
+            "message": "Waiting for waveform data",
+            "time_axis": [],
+            "freq_axis": [],
+            "stft_matrix": [],
+            "peak_frequency_hz": None,
+            "peak_energy_db": None,
+            "bandwidth_hz": None,
+            "signal_class": "Waiting for waveform data",
+        }
+
+    matrix = []
+    for powers in frames:
+        row = [
+            round(min(1.0, power / global_max_power), 4)
+            for power in powers
+        ]
+        matrix.append(row)
+
+    # Peak frequency is derived from the strongest actual received bin.
+    peak_frame_index = 0
+    peak_bin_index = 0
+    peak_power = 0.0
+    for frame_index, powers in enumerate(frames):
+        for bin_index, power in enumerate(powers):
+            if power > peak_power:
+                peak_power = power
+                peak_frame_index = frame_index
+                peak_bin_index = bin_index
+
+    peak_frequency = frequency_axis[peak_bin_index]
+    peak_energy_db = round(10.0 * math.log10(max(peak_power, 1e-12)), 2)
+
+    half_power = peak_power * 0.5
+    active_bins = [
+        frequency_axis[index]
+        for index, power in enumerate(frames[peak_frame_index])
+        if power >= half_power
+    ]
+    if active_bins:
+        bandwidth = round(max(active_bins) - min(active_bins), 2)
+    else:
+        bandwidth = 0.0
 
     return {
         "node_id": node_id,
         "timestamp": time.time(),
-        "is_intrusion": is_intrusion,
+        "available": True,
+        "sample_rate_hz": sample_rate_hz,
+        "samples_used": len(waveform),
         "time_axis": time_axis,
-        "freq_axis": freq_axis,
+        "freq_axis": frequency_axis,
         "stft_matrix": matrix,
-        "peak_frequency_hz": dominant_f,
-        "peak_energy_db": max_energy_db,
-        "bandwidth_hz": 12.5 if is_intrusion else 3.2,
-        "signal_class": "Elephant Seismic Footfall (Infrasound)" if is_intrusion else "Ambient Environmental Baseline"
+        "peak_frequency_hz": peak_frequency,
+        "peak_energy_db": peak_energy_db,
+        "bandwidth_hz": bandwidth,
+        "signal_class": "Received triaxial waveform",
     }
