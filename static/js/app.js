@@ -574,7 +574,7 @@ function updateAlertsTable(alerts) {
     if (!tbody) return;
 
     if (!alerts || alerts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">No intrusion alerts recorded.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No intrusion alerts recorded.</td></tr>`;
         return;
     }
 
@@ -588,10 +588,6 @@ function updateAlertsTable(alerts) {
                 <td>${a.direction}</td>
                 <td><span class="threat-badge ${a.threat_level}">${a.threat_level}</span></td>
                 <td><strong>${a.confidence}%</strong></td>
-                <td>
-                    ${a.mic_verified ? '<span style="color:var(--color-cyan);">Mic ✓ </span>' : ''}
-                    ${a.pir_verified ? '<span style="color:var(--color-emerald);">PIR ✓</span>' : ''}
-                </td>
                 <td style="font-size:0.8rem; color:var(--text-muted);">${a.details || ''}</td>
             </tr>
         `;
