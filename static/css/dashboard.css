@@ -429,13 +429,9 @@ body {
 
 .elephant-alert-details {
 
-    display: grid;
+    display: flex;
 
-    grid-template-columns:
-        repeat(4, minmax(90px, 1fr));
-
-    gap:
-        1.2rem;
+    gap: 3rem;
 
     flex: 1;
 }
@@ -830,8 +826,11 @@ body {
 
     .elephant-alert-details {
 
-        grid-template-columns:
-            repeat(2, 1fr);
+        gap:
+            1.5rem;
+
+        flex-wrap:
+            wrap;
 
     }
 
@@ -1717,3 +1716,65 @@ tr.clickable-row:hover {
     border: 1px solid rgba(255,255,255,0.06);
     box-sizing: border-box;
 }
+
+/* =========================================================
+   SPECIES SIMULATION CONTROLS & UTILITIES
+   ========================================================= */
+
+.simulation-controls {
+    display: flex;
+    gap: 0.65rem;
+    align-items: center;
+    flex-wrap: wrap;
+}
+
+.simulation-btn {
+    min-height: 42px;
+    padding: 0.65rem 1rem;
+    border-radius: 10px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.simulation-btn:hover {
+    transform: translateY(-1px);
+}
+
+.elephant-simulation {
+    border: 1px solid rgba(239,68,68,0.65);
+    background: rgba(239,68,68,0.15);
+    color: #F87171;
+}
+
+.elephant-simulation:hover {
+    background: rgba(239,68,68,0.25);
+    box-shadow: 0 0 15px rgba(239,68,68,0.3);
+}
+
+.human-simulation {
+    border: 1px solid rgba(59,130,246,0.65);
+    background: rgba(59,130,246,0.15);
+    color: #60A5FA;
+}
+
+.human-simulation:hover {
+    background: rgba(59,130,246,0.25);
+    box-shadow: 0 0 15px rgba(59,130,246,0.3);
+}
+
+.bovid-simulation {
+    border: 1px solid rgba(245,158,11,0.65);
+    background: rgba(245,158,11,0.15);
+    color: #FBBF24;
+}
+
+.bovid-simulation:hover {
+    background: rgba(245,158,11,0.25);
+    box-shadow: 0 0 15px rgba(245,158,11,0.3);
+}
+
+.visually-hidden-node-label {
+    display: none !important;
+}
+

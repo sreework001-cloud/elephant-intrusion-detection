@@ -29,18 +29,40 @@
                 <div class="status-badge" style="background: rgba(255,255,255,0.05); border-color: var(--border-glass);">
                     📡 <span id="wsStatus">Connecting...</span>
                 </div>
-                <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NW')">
-                    ⚡ Entry (G1→G2)
-                </button>
-                <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NE')">
-                    ⚡ Entry (G1→G3)
-                </button>
-                <button class="btn btn-secondary" onclick="triggerSimulation('OUTBOUND')">
-                    🔄 Outbound Retreat
-                </button>
-                <button class="btn btn-secondary" onclick="clearSimulation()">
-                    🧹 Clear
-                </button>
+                <div class="simulation-controls">
+                    <button
+                        class="btn simulation-btn elephant-simulation"
+                        id="simulateElephantBtn"
+                        type="button"
+                    >
+                        🐘 Elephant Detection
+                    </button>
+
+                    <button
+                        class="btn simulation-btn human-simulation"
+                        id="simulateHumanBtn"
+                        type="button"
+                    >
+                        👤 Human Detection
+                    </button>
+
+                    <button
+                        class="btn simulation-btn bovid-simulation"
+                        id="simulateBovidBtn"
+                        type="button"
+                    >
+                        🐃 Bovid Detection
+                    </button>
+
+                    <button
+                        class="btn btn-secondary"
+                        id="clearSimulationBtn"
+                        type="button"
+                        onclick="clearSimulation()"
+                    >
+                        🧹 Clear
+                    </button>
+                </div>
             </div>
         </header>
 
@@ -72,13 +94,12 @@
                 <div class="node-card-header">
                     <div class="node-title">
                         <h3>Node G1</h3>
-                        <div class="node-location">Sensor Position (Apex)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_01">ONLINE</span>
                 </div>
 
                 <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial ADC</div>
                     <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
                         <span style="color: #EF4444;" id="vx_NODE_01">Vx: 0.18</span>
                         <span style="color: #10B981;" id="vy_NODE_01">Vy: 0.15</span>
@@ -121,13 +142,12 @@
                 <div class="node-card-header">
                     <div class="node-title">
                         <h3>Node G2</h3>
-                        <div class="node-location">Sensor Position (Left)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_02">ONLINE</span>
                 </div>
 
                 <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial ADC</div>
                     <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
                         <span style="color: #EF4444;" id="vx_NODE_02">Vx: 0.16</span>
                         <span style="color: #10B981;" id="vy_NODE_02">Vy: 0.14</span>
@@ -169,14 +189,14 @@
             <div class="glass-card" id="card_NODE_03">
                 <div class="node-card-header">
                     <div class="node-title">
-                        <h3>Node G3</h3>
-                        <div class="node-location">Sensor Position (Right)</div>
+                        <h3 class="visually-hidden-node-label">Node G3</h3>
+                        <div class="node-location visually-hidden-node-label">Sensor Position (Right)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_03">ONLINE</span>
                 </div>
 
                 <div style="background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; margin-bottom: 0.75rem; border: 1px solid rgba(255,255,255,0.04);">
-                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial Geophone (mm/s)</div>
+                    <div style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.3rem;">Triaxial ADC</div>
                     <div style="display: flex; justify-content: space-between; font-size: 0.825rem; font-weight: 700; font-family: var(--font-heading);">
                         <span style="color: #EF4444;" id="vx_NODE_03">Vx: 0.12</span>
                         <span style="color: #10B981;" id="vy_NODE_03">Vy: 0.11</span>
@@ -371,15 +391,7 @@
                     </div>
 
 
-                    <div>
 
-                        <span>Sensor</span>
-
-                        <strong id="elephantAlertSensor">
-                            --
-                        </strong>
-
-                    </div>
 
                 </div>
 
@@ -554,10 +566,6 @@
                             >
                                 G3
                             </div>
-
-                            <span>
-                                G3
-                            </span>
 
                         </div>
 

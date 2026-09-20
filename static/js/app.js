@@ -9,7 +9,7 @@ const WAVEFORM_RATE_HZ = 200;
 
 const ADC_ALERT_THRESHOLD = 2500;
 
-const SIMULATION_DURATION_MS = 10000;
+const SIMULATION_DURATION_MS = 20000;
 
 const SIMULATION_SAMPLE_INTERVAL_MS =
     1000 / WAVEFORM_RATE_HZ;
@@ -25,6 +25,49 @@ let simulationSampleTimer = null;
 let simulationAnimationFrame = null;
 
 let simulationSampleIndex = 0;
+
+let simulationType = "elephant";
+
+let simulationPeakADC = 0;
+
+let simulationImpacts = [];
+
+const SIMULATION_PROFILES = {
+    elephant: {
+        name: "ELEPHANT",
+        minPeak: 2700,
+        maxPeak: 4200,
+        baseAmplitude: 250,
+        impactCount: 18
+    },
+    human: {
+        name: "HUMAN",
+        minPeak: 700,
+        maxPeak: 1650,
+        baseAmplitude: 180,
+        impactCount: 10
+    },
+    bovid: {
+        name: "BOVID",
+        minPeak: 1700,
+        maxPeak: 2400,
+        baseAmplitude: 220,
+        impactCount: 14
+    }
+};
+
+function createSimulationImpacts(profile, durationSeconds = 20) {
+    const impacts = [];
+    const count = profile.impactCount || 12;
+    const step = (durationSeconds - 3) / count;
+    for (let i = 0; i < count; i++) {
+        const center = 1.5 + i * step + (Math.random() - 0.5) * (step * 0.6);
+        const amp = profile.minPeak + Math.random() * (profile.maxPeak - profile.minPeak) - profile.baseAmplitude;
+        const width = 0.06 + Math.random() * 0.06;
+        impacts.push({ center, amplitude: Math.max(200, amp), width });
+    }
+    return impacts;
+}
 
 const SIMULATION_ALARM_DURATION_MS = 10000;
 
@@ -87,7 +130,28 @@ document.addEventListener("DOMContentLoaded", () => {
     initCanvas();
     initWaveformNodeSelector();
     initWebSocket();
+    initSimulationButtons();
 });
+
+function initSimulationButtons() {
+    document
+        .getElementById("simulateElephantBtn")
+        ?.addEventListener("click", () => {
+            triggerSpeciesSimulation("elephant");
+        });
+
+    document
+        .getElementById("simulateHumanBtn")
+        ?.addEventListener("click", () => {
+            triggerSpeciesSimulation("human");
+        });
+
+    document
+        .getElementById("simulateBovidBtn")
+        ?.addEventListener("click", () => {
+            triggerSpeciesSimulation("bovid");
+        });
+}
 
 function initWaveformNodeSelector() {
     ["NODE_01", "NODE_02", "NODE_03"].forEach(nodeId => {
@@ -903,6 +967,7 @@ function handleServerMessage(msg) {
          */
 
         if (
+            !simulationActive &&
             waveformMax >=
             ADC_ALERT_THRESHOLD
         ) {
@@ -1183,28 +1248,6 @@ function updateNodeUI(node) {
             pill.style = "";
         }
     }
-
-    const micBadge = document.getElementById(`mic_badge_${nodeId}`);
-    if (micBadge) {
-        if (node.mic_verified) {
-            micBadge.textContent = "MIC: VERIFIED ✓";
-            micBadge.className = "badge-tag verified";
-        } else {
-            micBadge.textContent = "MIC: OFF";
-            micBadge.className = "badge-tag unverified";
-        }
-    }
-
-    const pirBadge = document.getElementById(`pir_badge_${nodeId}`);
-    if (pirBadge) {
-        if (node.pir_active) {
-            pirBadge.textContent = "PIR: ACTIVE ✓";
-            pirBadge.className = "badge-tag verified";
-        } else {
-            pirBadge.textContent = "PIR: OFF";
-            pirBadge.className = "badge-tag unverified";
-        }
-    }
 }
 
 function showElephantDetectedAlert({
@@ -1351,6 +1394,135 @@ function hideElephantDetectedAlert() {
 
     elephantAlertActive =
         false;
+}
+
+function showSpeciesDetectionAlert(type) {
+
+    const alert =
+        document.getElementById(
+            "elephantDetectionAlert"
+        );
+
+    const title =
+        document.getElementById(
+            "elephantAlertTitle"
+        );
+
+    const description =
+        document.getElementById(
+            "elephantAlertDescription"
+        );
+
+    const trigger =
+        document.getElementById(
+            "elephantAlertTrigger"
+        );
+
+    /*
+     * IMPORTANT:
+     * Do NOT show sensor name.
+     */
+
+    const sensor =
+        document.getElementById(
+            "elephantAlertSensor"
+        );
+
+    if (!alert) {
+        return;
+    }
+
+    alert.classList.remove(
+        "hidden"
+    );
+
+    if (type === "elephant") {
+
+        if (title) {
+            title.textContent =
+                "ELEPHANT DETECTED!";
+        }
+
+        if (description) {
+            description.textContent =
+                "Ground vibration exceeds the elephant detection threshold.";
+        }
+
+        if (trigger) {
+            trigger.textContent =
+                "Simulation — Elephant";
+        }
+
+    }
+
+    else if (
+        type === "human"
+    ) {
+
+        if (title) {
+            title.textContent =
+                "HUMAN DETECTED!";
+        }
+
+        if (description) {
+            description.textContent =
+                "Ground vibration pattern is within the simulated human range.";
+        }
+
+        if (trigger) {
+            trigger.textContent =
+                "Simulation — Human";
+        }
+
+    }
+
+    else if (
+        type === "bovid"
+    ) {
+
+        if (title) {
+            title.textContent =
+                "BOVID DETECTED!";
+        }
+
+        if (description) {
+            description.textContent =
+                "Ground vibration pattern is within the simulated bovid range.";
+        }
+
+        if (trigger) {
+            trigger.textContent =
+                "Simulation — Bovid";
+        }
+
+    }
+
+    /*
+     * REMOVE SENSOR NAME FROM ALERT.
+     */
+
+    if (sensor) {
+
+        sensor.textContent =
+            "";
+
+        if (sensor.parentElement) {
+            sensor.parentElement.style.display =
+                "none";
+        }
+    }
+
+    const time =
+        document.getElementById(
+            "elephantAlertTime"
+        );
+
+    if (time) {
+
+        time.textContent =
+            new Date()
+                .toLocaleTimeString();
+    }
 }
 
 function testAlarmSound() {
@@ -1631,153 +1803,69 @@ function intensityToSpectrogramColor(val) {
 }
 
 function startLiveSimulationWaveform(
-    nodeId = "NODE_01"
+    nodeId = "NODE_02",
+    type = "elephant"
 ) {
-
-    /*
-     * Stop previous simulation.
-     */
 
     stopLiveSimulationWaveform();
 
-    waveformNode = nodeId;
+    waveformNode =
+        nodeId;
+
     if (typeof selectWaveformNode === "function") {
         selectWaveformNode(nodeId);
     }
 
-    const history =
-        triaxialHistory[nodeId];
+    simulationNodeId =
+        nodeId;
 
-
-    if (!history) {
-        return;
-    }
-
+    simulationType =
+        type;
 
     simulationActive =
         true;
 
-
-    simulationNodeId =
-        nodeId;
-
-
     simulationStartTime =
         performance.now();
-
 
     simulationSampleIndex =
         0;
 
+    simulationPeakADC =
+        0;
 
     /*
      * Clear previous waveform.
      */
 
+    const history =
+        triaxialHistory[nodeId];
+
+    if (!history) {
+        return;
+    }
+
     history.x.length = 0;
-
     history.y.length = 0;
-
     history.z.length = 0;
 
     if (history.timestamps) {
         history.timestamps.length = 0;
     }
 
-
     /*
-     * ======================================================
-     * PRE-FILL THE SCREEN WITH REALISTIC GROUND VIBRATION
-     * ======================================================
+     * Generate random impact locations for
+     * this 20-second simulation.
      */
 
-    const maxSamples =
-        WAVEFORM_RATE_HZ *
-        WAVEFORM_DISPLAY_SECONDS;
-
-
-    for (
-        let i = 0;
-        i < maxSamples;
-        i++
-    ) {
-
-        const t =
-            (
-                i -
-                maxSamples
-            ) /
-            WAVEFORM_RATE_HZ;
-
-
-        const noise =
-            (
-                Math.random() -
-                0.5
-            ) * 70;
-
-
-        const base =
-
-            180 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                3.2 *
-                t
-            ) * 65 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                5.7 *
-                t
-            ) * 40 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                9.0 *
-                t
-            ) * 20 +
-
-            noise;
-
-
-        history.x.push(
-            Math.max(
-                0,
-                base
-            )
+    simulationImpacts =
+        createSimulationImpacts(
+            SIMULATION_PROFILES[type] || SIMULATION_PROFILES.elephant,
+            20
         );
-
-
-        history.y.push(
-            Math.max(
-                0,
-                base * 0.90
-            )
-        );
-
-
-        history.z.push(
-            Math.max(
-                0,
-                base * 0.75
-            )
-        );
-
-        if (history.timestamps) {
-            history.timestamps.push(null);
-        }
-    }
-
 
     /*
-     * ======================================================
-     * GENERATE NEW SAMPLE EVERY 5 ms
-     * ======================================================
+     * Start 200-Hz live sample generation.
      */
 
     simulationSampleTimer =
@@ -1786,17 +1874,15 @@ function startLiveSimulationWaveform(
             SIMULATION_SAMPLE_INTERVAL_MS
         );
 
-
     /*
-     * ======================================================
-     * CONTINUOUS SCREEN REFRESH
-     * ======================================================
+     * Continuously redraw the graph.
      */
 
     simulationAnimationFrame =
         requestAnimationFrame(
             animateSimulationWaveform
         );
+
 }
 
 function animateSimulationWaveform() {
@@ -1807,14 +1893,13 @@ function animateSimulationWaveform() {
         return;
     }
 
-
     renderWaveform();
-
 
     simulationAnimationFrame =
         requestAnimationFrame(
             animateSimulationWaveform
         );
+
 }
 
 function generateLiveSimulationSample() {
@@ -1826,28 +1911,21 @@ function generateLiveSimulationSample() {
         return;
     }
 
-
     const history =
         triaxialHistory[
             simulationNodeId
         ];
 
-
     if (!history) {
-
-        stopLiveSimulationWaveform();
-
         return;
     }
-
 
     const elapsed =
         performance.now() -
         simulationStartTime;
 
-
     /*
-     * Stop simulation after 10 seconds.
+     * EXACTLY 20 SECOND SIMULATION
      */
 
     if (
@@ -1860,381 +1938,206 @@ function generateLiveSimulationSample() {
         return;
     }
 
-
-    /*
-     * Time of current sample.
-     */
-
     const t =
         simulationSampleIndex /
         WAVEFORM_RATE_HZ;
 
-
     simulationSampleIndex++;
 
+    const profile =
+        SIMULATION_PROFILES[
+            simulationType
+        ] || SIMULATION_PROFILES.elephant;
 
     /*
-     * ======================================================
-     * REALISTIC GROUND VIBRATION
-     * ======================================================
-     *
-     * Do NOT use a 40-60 ADC background.
-     *
-     * Use a visible low-level vibration of approximately
-     * 150-350 ADC.
+     * -------------------------------------------------------
+     * REALISTIC BACKGROUND
+     * -------------------------------------------------------
      */
-
 
     const noise =
         (
-            Math.random() - 0.5
+            Math.random() -
+            0.5
         ) * 100;
 
-
-    const groundVibration =
+    const background =
 
         180 +
 
         Math.sin(
             2 *
             Math.PI *
-            3.2 *
+            0.8 *
             t
-        ) * 65 +
+        ) * 55 +
 
         Math.sin(
             2 *
             Math.PI *
-            5.7 *
+            4.5 *
             t
-        ) * 45 +
+        ) * 35 +
 
         Math.sin(
             2 *
             Math.PI *
-            9.3 *
+            9.0 *
             t
-        ) * 25 +
+        ) * 20 +
 
         noise;
 
-
     /*
-     * ======================================================
-     * ELEPHANT ARRIVAL
-     * ======================================================
-     *
-     * The elephant event lasts several seconds.
-     *
-     * It is NOT one smooth hump.
-     *
-     * It consists of continuous repeated vibration pulses.
+     * -------------------------------------------------------
+     * TRANSIENT IMPACTS
+     * -------------------------------------------------------
      */
 
+    let impactSignal = 0;
 
-    let elephantAmplitude = 0;
-
-
-    if (
-        t >= 1.5 &&
-        t < 8.5
+    for (
+        const impact
+        of simulationImpacts
     ) {
 
-        /*
-         * Smooth entry.
-         */
+        const distance =
+            t -
+            impact.center;
 
         if (
-            t >= 1.5 &&
-            t < 2.2
+            Math.abs(distance) >
+            impact.width * 4
         ) {
-
-            elephantAmplitude =
-                (
-                    t - 1.5
-                ) / 0.7;
-
+            continue;
         }
 
-        /*
-         * Full vibration.
-         */
+        const envelope =
+            Math.exp(
+                -Math.abs(distance) /
+                impact.width
+            );
 
-        else if (
-            t >= 2.2 &&
-            t < 7.8
-        ) {
+        const ringing =
+            Math.sin(
+                2 *
+                Math.PI *
+                30 *
+                distance
+            );
 
-            elephantAmplitude =
-                1;
+        impactSignal +=
+            impact.amplitude *
+            envelope *
+            (
+                0.55 +
+                0.45 *
+                ringing
+            );
 
-        }
-
-        /*
-         * Smooth exit.
-         */
-
-        else {
-
-            elephantAmplitude =
-                (
-                    8.5 - t
-                ) / 0.7;
-        }
     }
 
-
-    elephantAmplitude =
-        Math.max(
-            0,
-            Math.min(
-                1,
-                elephantAmplitude
-            )
-        );
-
-
     /*
-     * ======================================================
-     * REALISTIC ELEPHANT VIBRATION
-     * ======================================================
-     *
-     * Multiple frequencies are combined so that the waveform
-     * does NOT look like a mathematical sine wave.
+     * -------------------------------------------------------
+     * THREE AXES
+     * -------------------------------------------------------
      */
-
-
-    const lowFrequencyComponent =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            2.2 *
-            t
-        ) * 500;
-
-
-    const bodyVibration =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            5.0 *
-            t
-        ) * 700;
-
-
-    const footImpact =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            8.5 *
-            t
-        ) * 420;
-
-
-    const highFrequencyComponent =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            13.0 *
-            t
-        ) * 180;
-
-
-    const irregularComponent =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            17.5 *
-            t
-        ) * 100;
-
-
-    /*
-     * Combine the vibration components.
-     */
-
-    const elephantVibration =
-
-        elephantAmplitude *
-        (
-            1700 +
-
-            lowFrequencyComponent +
-
-            bodyVibration +
-
-            footImpact +
-
-            highFrequencyComponent +
-
-            irregularComponent
-        );
-
-
-    /*
-     * ======================================================
-     * THREE GEOPHONE AXES
-     * ======================================================
-     *
-     * Each axis has slightly different amplitude and phase.
-     */
-
 
     const xValue =
-
-        groundVibration +
-
-        elephantVibration;
-
+        background +
+        impactSignal;
 
     const yValue =
-
-        groundVibration * 0.90 +
-
-        elephantAmplitude *
+        background * 0.88 +
+        impactSignal * 0.75 +
         (
-            1450 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                4.7 *
-                t +
-                0.4
-            ) * 650 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                8.2 *
-                t
-            ) * 380 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                12.5 *
-                t
-            ) * 170
-        );
-
+            Math.random() -
+            0.5
+        ) * 50;
 
     const zValue =
-
-        groundVibration * 0.75 +
-
-        elephantAmplitude *
+        background * 0.72 +
+        impactSignal * 0.58 +
         (
-            1100 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                4.1 *
-                t +
-                0.7
-            ) * 500 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                7.5 *
-                t
-            ) * 300 +
-
-            Math.sin(
-                2 *
-                Math.PI *
-                11.8 *
-                t
-            ) * 150
-        );
-
+            Math.random() -
+            0.5
+        ) * 40;
 
     /*
-     * ======================================================
+     * -------------------------------------------------------
      * ADC LIMIT
-     * ======================================================
-     *
-     * Keep everything inside 0–5000 ADC.
+     * -------------------------------------------------------
      */
 
-
-    history.x.push(
+    const xADC =
         Math.max(
             0,
             Math.min(
                 5000,
                 xValue
             )
-        )
-    );
+        );
 
-
-    history.y.push(
+    const yADC =
         Math.max(
             0,
             Math.min(
                 5000,
                 yValue
             )
-        )
-    );
+        );
 
-
-    history.z.push(
+    const zADC =
         Math.max(
             0,
             Math.min(
                 5000,
                 zValue
             )
-        )
-    );
-
+        );
 
     /*
-     * ======================================================
-     * ROLLING 10-SECOND BUFFER
-     * ======================================================
+     * -------------------------------------------------------
+     * APPEND NEW SAMPLE
+     * -------------------------------------------------------
+     */
+
+    history.x.push(xADC);
+
+    history.y.push(yADC);
+
+    history.z.push(zADC);
+
+    /*
+     * -------------------------------------------------------
+     * KEEP ROLLING 10-SECOND DISPLAY WINDOW
+     * -------------------------------------------------------
      */
 
     const maxSamples =
         WAVEFORM_RATE_HZ *
         WAVEFORM_DISPLAY_SECONDS;
 
-
     while (
         history.x.length >
         maxSamples
     ) {
-
         history.x.shift();
     }
-
 
     while (
         history.y.length >
         maxSamples
     ) {
-
         history.y.shift();
     }
-
 
     while (
         history.z.length >
         maxSamples
     ) {
-
         history.z.shift();
     }
-
 
     if (history.timestamps) {
         history.timestamps.push(Date.now() / 1000);
@@ -2243,34 +2146,18 @@ function generateLiveSimulationSample() {
         }
     }
 
-
     /*
-     * IMPORTANT:
-     *
-     * Detection should use the actual simulated samples.
+     * Track maximum.
      */
 
-    const currentMaximum =
+    simulationPeakADC =
         Math.max(
-            xValue,
-            yValue,
-            zValue
+            simulationPeakADC,
+            xADC,
+            yADC,
+            zADC
         );
 
-
-    if (
-        currentMaximum >=
-        ADC_ALERT_THRESHOLD
-    ) {
-
-        /*
-         * Existing alert logic can be called here.
-         *
-         * DO NOT repeatedly play the alarm from this point.
-         * The simulation alarm is already controlled separately.
-         */
-
-    }
 }
 
 function stopLiveSimulationWaveform() {
@@ -2536,6 +2423,44 @@ function startSimulationAlarm() {
         }, SIMULATION_ALARM_DURATION_MS);
 }
 
+function triggerSpeciesSimulation(type) {
+
+    /*
+     * Use the selected simulation node internally.
+     *
+     * Do NOT display the node name on the alert.
+     */
+
+    const simulationNode =
+        "NODE_02";
+
+    startLiveSimulationWaveform(
+        simulationNode,
+        type
+    );
+
+    /*
+     * Show the correct species immediately.
+     */
+
+    showSpeciesDetectionAlert(
+        type
+    );
+
+    /*
+     * Siren ONLY for elephant simulation.
+     */
+
+    if (
+        type === "elephant"
+    ) {
+
+        startSimulationAlarm();
+
+    }
+
+}
+
 async function triggerSimulation(
     type = "INBOUND_NW"
 ) {
@@ -2575,7 +2500,8 @@ async function triggerSimulation(
      */
 
     startLiveSimulationWaveform(
-        simulationNode
+        simulationNode,
+        "elephant"
     );
 
 
@@ -2677,6 +2603,9 @@ async function clearSimulation() {
             } catch (e) {}
             simulationAudioCtx = null;
         }
+
+        createInitialHistory();
+        renderWaveform();
 
 
         /*
