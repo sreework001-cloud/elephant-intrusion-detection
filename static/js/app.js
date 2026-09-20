@@ -44,10 +44,10 @@ let simulationImpacts = [];
 
 const ADC_VOLTAGE_CALIBRATION = {
     // ADC resting/center reference corresponding to 0V
-    referenceADC: 180.0,
+    referenceADC: 320.0,
 
-    // Volts per ADC unit (~3300 ADC excursion corresponds to ~4.0V)
-    voltsPerADC: 4.0 / 3300.0,
+    // Volts per ADC unit (~3200 ADC excursion corresponds to ~3.8V)
+    voltsPerADC: 3.8 / 3200.0,
 
     // Bipolar voltage limits
     minVoltage: -5.0,
@@ -79,7 +79,7 @@ function adcToVoltage(adcValue, axis = "x") {
     voltagePhases[ax] = (voltagePhases[ax] + 2 * Math.PI * freq * dt) % (2 * Math.PI);
 
     const delta = adcValue - ADC_VOLTAGE_CALIBRATION.referenceADC;
-    const noise = (Math.random() - 0.5) * 0.10;
+    const noise = (Math.random() - 0.5) * 0.08;
 
     // Bipolar oscillation matching the seismic ground impact phase
     const v = (delta * ADC_VOLTAGE_CALIBRATION.voltsPerADC) * Math.sin(voltagePhases[ax]) + noise;
@@ -103,40 +103,42 @@ function adcToVoltage(adcValue, axis = "x") {
  * continuously cross each other.
  */
 function generateDynamicBackground(t, axis = "x") {
+    const positiveT = Math.abs(t);
+
     // 1. Slow drift: unique phase (120 deg apart) & frequencies per axis
     let drift = 0;
     if (axis === "x") {
-        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 0.0)
-                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 1.2)
-                    + 25 * Math.cos(2 * Math.PI * 0.02 * t);
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * positiveT + 0.0)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * positiveT + 1.2)
+                    + 25 * Math.cos(2 * Math.PI * 0.02 * positiveT);
     } else if (axis === "y") {
-        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 2.094)
-                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 3.3)
-                    + 25 * Math.cos(2 * Math.PI * 0.023 * t + 1.5);
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * positiveT + 2.094)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * positiveT + 3.3)
+                    + 25 * Math.cos(2 * Math.PI * 0.023 * positiveT + 1.5);
     } else { // "z"
-        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 4.188)
-                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 5.4)
-                    + 25 * Math.sin(2 * Math.PI * 0.017 * t + 2.8);
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * positiveT + 4.188)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * positiveT + 5.4)
+                    + 25 * Math.sin(2 * Math.PI * 0.017 * positiveT + 2.8);
     }
 
     // 2. Natural ambient ground vibration: independent non-harmonic multi-tone
     let groundVib = 0;
     if (axis === "x") {
-        groundVib = 36 * Math.sin(2 * Math.PI * 2.3 * t + 0.8)
-                  + 22 * Math.sin(2 * Math.PI * 5.7 * t + 1.4)
-                  + 14 * Math.sin(2 * Math.PI * 11.2 * t + 0.2);
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.3 * positiveT + 0.8)
+                  + 22 * Math.sin(2 * Math.PI * 5.7 * positiveT + 1.4)
+                  + 14 * Math.sin(2 * Math.PI * 11.2 * positiveT + 0.2);
     } else if (axis === "y") {
-        groundVib = 36 * Math.sin(2 * Math.PI * 2.7 * t + 2.1)
-                  + 22 * Math.sin(2 * Math.PI * 5.2 * t + 0.3)
-                  + 14 * Math.sin(2 * Math.PI * 12.8 * t + 1.7);
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.7 * positiveT + 2.1)
+                  + 22 * Math.sin(2 * Math.PI * 5.2 * positiveT + 0.3)
+                  + 14 * Math.sin(2 * Math.PI * 12.8 * positiveT + 1.7);
     } else { // "z"
-        groundVib = 36 * Math.sin(2 * Math.PI * 2.1 * t + 3.7)
-                  + 22 * Math.sin(2 * Math.PI * 6.1 * t + 2.9)
-                  + 14 * Math.sin(2 * Math.PI * 10.5 * t + 0.9);
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.1 * positiveT + 3.7)
+                  + 22 * Math.sin(2 * Math.PI * 6.1 * positiveT + 2.9)
+                  + 14 * Math.sin(2 * Math.PI * 10.5 * positiveT + 0.9);
     }
 
     // 3. Occasional small ambient micro-disturbances
-    const microPulseTime = t % 4.1;
+    const microPulseTime = positiveT % 4.1;
     let microDisturbance = 0;
     if (microPulseTime < 0.25) {
         const pEnv = Math.exp(-microPulseTime / 0.06);
@@ -225,28 +227,31 @@ function createSimulationImpacts(species = "elephant") {
 
 const SIMULATION_ALARM_DURATION_MS = 10000;
 
+let waveformDisplayMode = "idle"; // "idle" | "live" | "demo"
+let simulationActive = false;
+let fullDemoActive = false;
+let simulationType = null;
+let simulationStartTime = null;
+let simulationSampleTimer = null;
+let waveformAnimationFrame = null;
+
 let simulationAlarmTimer = null;
-
 let simulationSirenInterval = null;
-
 let simulationAudioCtx = null;
 let simulationOscillator = null;
 let simulationGain = null;
 
 const FULL_DEMO_DURATION_MS = 120000;
-let fullDemoActive = false;
 let fullDemoStartTime = 0;
 let fullDemoPreviousPhase = null;
 let fullDemoSampleTimer = null;
-let fullDemoAnimationFrame = null;
 let fullDemoImpacts = [];
 let fullDemoSampleIndex = 0;
 
 const ALERT_COOLDOWN_MS = 5000;
-
 let lastElephantAlertTime = 0;
-
 let elephantAlertActive = false;
+
 const WAVEFORM_HISTORY_SECONDS = 20;
 const maxHistoryPoints = WAVEFORM_RATE_HZ * WAVEFORM_HISTORY_SECONDS;
 const WAVEFORM_DISPLAY_SECONDS = 10;
@@ -271,89 +276,12 @@ let triaxialHistory = {
     "NODE_03": { x: [], y: [], z: [], vx: [], vy: [], vz: [], timestamps: [] }
 };
 
-function createInitialHistory() {
-
-    for (const nodeId of Object.keys(triaxialHistory)) {
-
-        triaxialHistory[nodeId].x = [];
-        triaxialHistory[nodeId].y = [];
-        triaxialHistory[nodeId].z = [];
-        triaxialHistory[nodeId].vx = [];
-        triaxialHistory[nodeId].vy = [];
-        triaxialHistory[nodeId].vz = [];
-        triaxialHistory[nodeId].timestamps = [];
-
-        for (let i = 0; i < maxHistoryPoints; i++) {
-            const t = (i - maxHistoryPoints) / WAVEFORM_RATE_HZ;
-            const x = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "x"))));
-            const y = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "y"))));
-            const z = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "z"))));
-
-            triaxialHistory[nodeId].x.push(x);
-            triaxialHistory[nodeId].y.push(y);
-            triaxialHistory[nodeId].z.push(z);
-
-            triaxialHistory[nodeId].vx.push(adcToVoltage(x, "x"));
-            triaxialHistory[nodeId].vy.push(adcToVoltage(y, "y"));
-            triaxialHistory[nodeId].vz.push(adcToVoltage(z, "z"));
-
-            triaxialHistory[nodeId].timestamps.push(null);
-        }
-    }
-}
-
-let ambientBackgroundTimer = null;
-let ambientSampleTime = 0;
-
-function startAmbientBackgroundGenerator() {
-    if (ambientBackgroundTimer) return;
-    ambientBackgroundTimer = setInterval(() => {
-        if (simulationActive) return;
-
-        for (const nid of Object.keys(triaxialHistory)) {
-            const h = triaxialHistory[nid];
-            if (!h) continue;
-
-            for (let s = 0; s < 10; s++) {
-                const t = ambientSampleTime + (s / WAVEFORM_RATE_HZ);
-                const x = Math.max(0, Math.min(5000, generateDynamicBackground(t, "x")));
-                const y = Math.max(0, Math.min(5000, generateDynamicBackground(t, "y")));
-                const z = Math.max(0, Math.min(5000, generateDynamicBackground(t, "z")));
-
-                h.x.push(x);
-                h.y.push(y);
-                h.z.push(z);
-
-                h.vx.push(adcToVoltage(x, "x"));
-                h.vy.push(adcToVoltage(y, "y"));
-                h.vz.push(adcToVoltage(z, "z"));
-
-                const maxSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
-                while (h.x.length > maxSamples) h.x.shift();
-                while (h.y.length > maxSamples) h.y.shift();
-                while (h.z.length > maxSamples) h.z.shift();
-                while (h.vx && h.vx.length > maxSamples) h.vx.shift();
-                while (h.vy && h.vy.length > maxSamples) h.vy.shift();
-                while (h.vz && h.vz.length > maxSamples) h.vz.shift();
-
-                if (h.timestamps) {
-                    h.timestamps.push(Date.now() / 1000);
-                    while (h.timestamps.length > maxSamples) h.timestamps.shift();
-                }
-            }
-        }
-        ambientSampleTime += 10 / WAVEFORM_RATE_HZ;
-    }, 50);
-}
-
-createInitialHistory();
-
 document.addEventListener("DOMContentLoaded", () => {
     initCanvas();
     initWaveformNodeSelector();
     initWebSocket();
     initSimulationButtons();
-    startAmbientBackgroundGenerator();
+    renderWaveform();
 });
 
 function initSimulationButtons() {
@@ -445,8 +373,10 @@ function initCanvas() {
     }
 
     resizeWaveformCanvas();
-    window.addEventListener("resize", resizeWaveformCanvas);
-    requestAnimationFrame(renderWaveform);
+    window.addEventListener("resize", () => {
+        resizeWaveformCanvas();
+        renderWaveform();
+    });
 }
 
 function resizeWaveformCanvas() {
@@ -483,6 +413,31 @@ function resizeWaveformCanvas() {
     }
 }
 
+function startWaveformAnimation() {
+    if (waveformAnimationFrame) {
+        cancelAnimationFrame(waveformAnimationFrame);
+        waveformAnimationFrame = null;
+    }
+
+    function loop() {
+        if (waveformDisplayMode !== "demo" && waveformDisplayMode !== "live") {
+            waveformAnimationFrame = null;
+            return;
+        }
+        renderWaveform();
+        waveformAnimationFrame = requestAnimationFrame(loop);
+    }
+
+    waveformAnimationFrame = requestAnimationFrame(loop);
+}
+
+function stopWaveformAnimation() {
+    if (waveformAnimationFrame) {
+        cancelAnimationFrame(waveformAnimationFrame);
+        waveformAnimationFrame = null;
+    }
+}
+
 function getVisibleData(data) {
     if (!Array.isArray(data)) return [];
     return data.length <= WAVEFORM_DISPLAY_POINTS
@@ -490,610 +445,15 @@ function getVisibleData(data) {
         : data.slice(data.length - WAVEFORM_DISPLAY_POINTS);
 }
 
-
-function renderWaveform(timestamp = 0) {
-
-    if (!canvas || !ctx) {
-        requestAnimationFrame(renderWaveform);
-        return;
-    }
-
-    if (
-        !simulationActive &&
-        lastWaveformRenderTime !== 0 &&
-        timestamp - lastWaveformRenderTime <
-            WAVEFORM_UPDATE_INTERVAL_MS
-    ) {
-        requestAnimationFrame(renderWaveform);
-        return;
-    }
-
-    lastWaveformRenderTime =
-        timestamp;
-
-    const rect =
-        canvas.getBoundingClientRect();
-
-    if (
-        rect.width <= 0 ||
-        rect.height <= 0
-    ) {
-        requestAnimationFrame(renderWaveform);
+function renderWaveform() {
+    if (!canvas || !ctx || !voltageCanvas || !voltageCtx) {
         return;
     }
 
     resizeWaveformCanvas();
 
-    const width = rect.width;
-    const height = rect.height;
-
-    const marginLeft = 58;
-    const marginRight = 18;
-    const marginTop = 18;
-    const marginBottom = 42;
-
-    const graphLeft =
-        marginLeft;
-
-    const graphRight =
-        width - marginRight;
-
-    const graphTop =
-        marginTop;
-
-    const graphBottom =
-        height - marginBottom;
-
-    const graphWidth =
-        graphRight - graphLeft;
-
-    const graphHeight =
-        graphBottom - graphTop;
-
-
-    /*
-     * CLEAR GRAPH
-     */
-
-    ctx.clearRect(
-        0,
-        0,
-        width,
-        height
-    );
-
-    ctx.fillStyle =
-        "#10171B";
-
-    ctx.fillRect(
-        graphLeft,
-        graphTop,
-        graphWidth,
-        graphHeight
-    );
-
-
-    const history =
-        triaxialHistory[
-            waveformNode
-        ];
-
-    if (!history) {
-        requestAnimationFrame(
-            renderWaveform
-        );
-        return;
-    }
-
-
-    /*
-     * LAST 10 SECONDS OF DATA
-     */
-
-    const xData =
-        getVisibleData(
-            history.x
-        );
-
-    const yData =
-        getVisibleData(
-            history.y
-        );
-
-    const zData =
-        getVisibleData(
-            history.z
-        );
-
-
-    /*
-     * FIXED ADC AMPLITUDE SCALE
-     *
-     * Y AXIS:
-     *
-     * 0
-     * 1000
-     * 2000
-     * 3000
-     * 4000
-     * 5000
-     */
-
-    const yMin = 0;
-    const yMax = 5000;
-
-
-    /*
-     * GRID
-     */
-
-    ctx.lineWidth = 1;
-
-    ctx.strokeStyle =
-        "rgba(255,255,255,0.08)";
-
-
-    /*
-     * HORIZONTAL GRID
-     */
-
-    const horizontalTicks = 5;
-
-    for (
-        let i = 0;
-        i <= horizontalTicks;
-        i++
-    ) {
-
-        const y =
-            graphBottom -
-            (i / horizontalTicks) *
-                graphHeight;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            graphLeft,
-            y
-        );
-
-        ctx.lineTo(
-            graphRight,
-            y
-        );
-
-        ctx.stroke();
-    }
-
-
-    /*
-     * VERTICAL GRID
-     */
-
-    const verticalTicks = 5;
-
-    for (
-        let i = 0;
-        i <= verticalTicks;
-        i++
-    ) {
-
-        const x =
-            graphLeft +
-            (i / verticalTicks) *
-                graphWidth;
-
-        ctx.beginPath();
-
-        ctx.moveTo(
-            x,
-            graphTop
-        );
-
-        ctx.lineTo(
-            x,
-            graphBottom
-        );
-
-        ctx.stroke();
-    }
-
-
-    /*
-     * Y AXIS LABELS
-     *
-     * ADC AMPLITUDE
-     */
-
-    ctx.font =
-        "12px Inter, Arial, sans-serif";
-
-    ctx.fillStyle =
-        "rgba(220,230,235,0.72)";
-
-    ctx.textAlign =
-        "right";
-
-    ctx.textBaseline =
-        "middle";
-
-
-    for (
-        let i = 0;
-        i <= horizontalTicks;
-        i++
-    ) {
-
-        const value =
-            i * 1000;
-
-        const y =
-            graphBottom -
-            (value / 5000) *
-                graphHeight;
-
-        ctx.fillText(
-            `${value}`,
-            graphLeft - 8,
-            y
-        );
-    }
-
-
-
-    /*
-     * Y-AXIS UNIT LABEL
-     */
-    ctx.font = "10px Inter, Arial, sans-serif";
-    ctx.fillStyle = "rgba(220,230,235,0.50)";
-    ctx.textAlign = "left";
-    ctx.textBaseline = "bottom";
-    ctx.fillText("ADC", graphLeft, graphTop - 4);
-
-
-    /*
-     * REAL-TIME X-AXIS
-     */
-
-    ctx.font =
-        "11px Inter, Arial, sans-serif";
-
-    ctx.fillStyle =
-        "rgba(220,230,235,0.60)";
-
-    ctx.textAlign =
-        "center";
-
-    ctx.textBaseline =
-        "top";
-
-
-    const timeLabels = [
-        "-10 s",
-        "-7.5 s",
-        "-5 s",
-        "-2.5 s",
-        "0 s"
-    ];
-
-
-    for (
-        let i = 0;
-        i < timeLabels.length;
-        i++
-    ) {
-
-        const x =
-            graphLeft +
-            (i / (timeLabels.length - 1)) *
-            graphWidth;
-
-        ctx.fillText(
-            timeLabels[i],
-            x,
-            graphBottom + 10
-        );
-    }
-
-
-    /*
-     * DRAW WAVEFORM
-     */
-
-    function drawTrace(
-        data,
-        lineColor
-    ) {
-
-        if (
-            !Array.isArray(data) ||
-            data.length < 2
-        ) {
-            return;
-        }
-
-        const displayCount =
-            Math.min(
-                data.length,
-                Math.max(
-                    300,
-                    Math.floor(
-                        graphWidth * 1.5
-                    )
-                )
-            );
-
-        const stride =
-            Math.max(
-                1,
-                Math.floor(
-                    data.length /
-                        displayCount
-                )
-            );
-
-
-        ctx.beginPath();
-
-        ctx.strokeStyle =
-            lineColor;
-
-        ctx.lineWidth =
-            1.35;
-
-        ctx.lineJoin =
-            "round";
-
-        ctx.lineCap =
-            "round";
-
-
-        let started =
-            false;
-
-
-        for (
-            let index = 0;
-            index < data.length;
-            index += stride
-        ) {
-
-            let value =
-                Number(
-                    data[index]
-                );
-
-            if (
-                !Number.isFinite(value)
-            ) {
-                continue;
-            }
-
-
-            /*
-             * ADC RANGE
-             *
-             * Keep values inside
-             * 0 - 5000.
-             */
-
-            value =
-                Math.max(
-                    yMin,
-                    Math.min(
-                        yMax,
-                        value
-                    )
-                );
-
-
-            const x =
-                graphLeft +
-                (index /
-                    (data.length - 1)) *
-                    graphWidth;
-
-
-            const y =
-                graphBottom -
-                ((value - yMin) /
-                    (yMax - yMin)) *
-                    graphHeight;
-
-
-            if (!started) {
-
-                ctx.moveTo(
-                    x,
-                    y
-                );
-
-                started = true;
-
-            } else {
-
-                ctx.lineTo(
-                    x,
-                    y
-                );
-            }
-        }
-
-
-        /*
-         * Always draw final sample.
-         */
-
-        const lastIndex =
-            data.length - 1;
-
-        if (
-            lastIndex >= 0
-        ) {
-
-            const lastValue =
-                Number(
-                    data[lastIndex]
-                );
-
-            if (
-                Number.isFinite(
-                    lastValue
-                )
-            ) {
-
-                const value =
-                    Math.max(
-                        yMin,
-                        Math.min(
-                            yMax,
-                            lastValue
-                        )
-                    );
-
-
-                const x =
-                    graphRight;
-
-
-                const y =
-                    graphBottom -
-                    ((value - yMin) /
-                        (yMax - yMin)) *
-                        graphHeight;
-
-
-                if (!started) {
-
-                    ctx.moveTo(
-                        x,
-                        y
-                    );
-
-                } else {
-
-                    ctx.lineTo(
-                        x,
-                        y
-                    );
-                }
-            }
-        }
-
-
-        if (started) {
-            ctx.stroke();
-        }
-    }
-
-
-    /*
-     * X CHANNEL
-     */
-
-    if (axisVisibility.X) {
-
-        drawTrace(
-            xData,
-            "#2F80ED"
-        );
-    }
-
-
-    /*
-     * Y CHANNEL
-     */
-
-    if (axisVisibility.Y) {
-
-        drawTrace(
-            yData,
-            "#F2994A"
-        );
-    }
-
-
-    /*
-     * Z CHANNEL
-     */
-
-    if (axisVisibility.Z) {
-
-        drawTrace(
-            zData,
-            "#10B981"
-        );
-    }
-
-
-    /*
-     * GRAPH TOP LABEL
-     */
-
-    ctx.font =
-        "11px Inter, Arial, sans-serif";
-
-    ctx.textBaseline =
-        "top";
-
-    ctx.textAlign =
-        "left";
-
-    ctx.fillStyle =
-        "rgba(220,230,235,0.60)";
-
-
-    ctx.fillText(
-        `${waveformNode.replace(
-            "NODE_",
-            "G"
-        )} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
-        graphLeft + 8,
-        graphTop + 5
-    );
-
-
-    /*
-     * LIVE INDICATOR
-     */
-
-    ctx.textAlign =
-        "right";
-
-    ctx.fillStyle =
-        "#10B981";
-
-
-    ctx.fillText(
-        `● LIVE • ${WAVEFORM_RATE_HZ} Hz`,
-        graphRight - 6,
-        graphTop + 5
-    );
-
-
-    /*
-     * RENDER VOLTAGE WAVEFORM SIMULTANEOUSLY
-     */
-    renderVoltageWaveform();
-
-    requestAnimationFrame(
-        renderWaveform
-    );
-}
-
-function renderVoltageWaveform() {
-
-    if (!voltageCanvas || !voltageCtx) {
-        return;
-    }
-
-    const rect =
-        voltageCanvas.getBoundingClientRect();
-
-    if (
-        rect.width <= 0 ||
-        rect.height <= 0
-    ) {
+    const rect = canvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) {
         return;
     }
 
@@ -1113,46 +473,211 @@ function renderVoltageWaveform() {
     const graphHeight = graphBottom - graphTop;
 
     /*
-     * CLEAR GRAPH
+     * 1. RENDER ADC CANVAS
      */
-    voltageCtx.clearRect(0, 0, width, height);
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = "#10171B";
+    ctx.fillRect(graphLeft, graphTop, graphWidth, graphHeight);
 
-    voltageCtx.fillStyle = "#10171B";
-    voltageCtx.fillRect(
-        graphLeft,
-        graphTop,
-        graphWidth,
-        graphHeight
+    const history = triaxialHistory[waveformNode] || { x: [], y: [], z: [], vx: [], vy: [], vz: [] };
+
+    // ADC AMPLITUDE SCALE (0 to 5000)
+    const yMin = 0;
+    const yMax = 5000;
+
+    // HORIZONTAL GRID
+    const horizontalTicks = 5;
+    ctx.lineWidth = 1;
+    ctx.strokeStyle = "rgba(255,255,255,0.08)";
+
+    for (let i = 0; i <= horizontalTicks; i++) {
+        const y = graphBottom - (i / horizontalTicks) * graphHeight;
+        ctx.beginPath();
+        ctx.moveTo(graphLeft, y);
+        ctx.lineTo(graphRight, y);
+        ctx.stroke();
+    }
+
+    // VERTICAL GRID (5 intervals for -10s to 0s)
+    const verticalTicks = 5;
+    for (let i = 0; i <= verticalTicks; i++) {
+        const x = graphLeft + (i / verticalTicks) * graphWidth;
+        ctx.beginPath();
+        ctx.moveTo(x, graphTop);
+        ctx.lineTo(x, graphBottom);
+        ctx.stroke();
+    }
+
+    // Y-AXIS LABELS (0, 1000, 2000, 3000, 4000, 5000)
+    ctx.font = "12px Inter, Arial, sans-serif";
+    ctx.fillStyle = "rgba(220,230,235,0.72)";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "middle";
+
+    for (let i = 0; i <= horizontalTicks; i++) {
+        const value = i * 1000;
+        const y = graphBottom - (value / 5000) * graphHeight;
+        ctx.fillText(`${value}`, graphLeft - 8, y);
+    }
+
+    // Y-AXIS UNIT LABEL
+    ctx.font = "10px Inter, Arial, sans-serif";
+    ctx.fillStyle = "rgba(220,230,235,0.50)";
+    ctx.textAlign = "left";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("ADC", graphLeft, graphTop - 4);
+
+    // REAL-TIME X-AXIS LABELS (-10 s to 0 s)
+    ctx.font = "11px Inter, Arial, sans-serif";
+    ctx.fillStyle = "rgba(220,230,235,0.60)";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "top";
+
+    const timeLabels = ["-10 s", "-7.5 s", "-5 s", "-2.5 s", "0 s"];
+    for (let i = 0; i < timeLabels.length; i++) {
+        const x = graphLeft + (i / (timeLabels.length - 1)) * graphWidth;
+        ctx.fillText(timeLabels[i], x, graphBottom + 10);
+    }
+
+    // THRESHOLD LINE (2500 ADC)
+    const thresholdY = graphBottom - (ADC_ALERT_THRESHOLD / 5000) * graphHeight;
+    ctx.save();
+    ctx.setLineDash([5, 5]);
+    ctx.strokeStyle = "#EF4444";
+    ctx.lineWidth = 1.25;
+    ctx.beginPath();
+    ctx.moveTo(graphLeft, thresholdY);
+    ctx.lineTo(graphRight, thresholdY);
+    ctx.stroke();
+    ctx.restore();
+
+    ctx.font = "10px Inter, Arial, sans-serif";
+    ctx.fillStyle = "#EF4444";
+    ctx.textAlign = "right";
+    ctx.textBaseline = "bottom";
+    ctx.fillText("ALERT THRESHOLD (2500 ADC)", graphRight - 6, thresholdY - 4);
+
+    // GRAPH TOP LABELS
+    ctx.font = "11px Inter, Arial, sans-serif";
+    ctx.textBaseline = "top";
+    ctx.textAlign = "left";
+    ctx.fillStyle = "rgba(220,230,235,0.60)";
+    ctx.fillText(
+        `${waveformNode.replace("NODE_", "G")} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
+        graphLeft + 8,
+        graphTop + 5
     );
 
-    const history =
-        triaxialHistory[waveformNode];
+    ctx.textAlign = "right";
+    if (waveformDisplayMode === "idle") {
+        ctx.fillStyle = "rgba(220,230,235,0.45)";
+        ctx.fillText("● READY", graphRight - 6, graphTop + 5);
+    } else {
+        ctx.fillStyle = "#10B981";
+        ctx.fillText(`● LIVE • ${WAVEFORM_RATE_HZ} Hz`, graphRight - 6, graphTop + 5);
+    }
 
-    if (!history) {
-        return;
+    // DRAW ADC TRACES ONLY IF NOT IDLE
+    if (waveformDisplayMode !== "idle") {
+        const maxPoints = WAVEFORM_DISPLAY_POINTS;
+
+        function drawTrace(data, lineColor) {
+            if (!Array.isArray(data) || data.length < 2) return;
+
+            const len = data.length;
+            const stride = Math.max(1, Math.floor(len / Math.max(300, Math.floor(graphWidth * 1.5))));
+
+            ctx.beginPath();
+            ctx.strokeStyle = lineColor;
+            ctx.lineWidth = 1.35;
+            ctx.lineJoin = "round";
+            ctx.lineCap = "round";
+
+            let started = false;
+
+            for (let index = 0; index < len; index += stride) {
+                let value = Number(data[index]);
+                if (!Number.isFinite(value)) continue;
+                value = Math.max(yMin, Math.min(yMax, value));
+
+                const x = graphRight - ((len - 1 - index) / (maxPoints - 1)) * graphWidth;
+                const y = graphBottom - ((value - yMin) / (yMax - yMin)) * graphHeight;
+
+                if (!started) {
+                    ctx.moveTo(x, y);
+                    started = true;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            const lastIndex = len - 1;
+            let lastValue = Number(data[lastIndex]);
+            if (Number.isFinite(lastValue)) {
+                lastValue = Math.max(yMin, Math.min(yMax, lastValue));
+                const x = graphRight;
+                const y = graphBottom - ((lastValue - yMin) / (yMax - yMin)) * graphHeight;
+                if (!started) {
+                    ctx.moveTo(x, y);
+                    started = true;
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            if (started) {
+                ctx.stroke();
+            }
+        }
+
+        if (axisVisibility.X) drawTrace(history.x, "#2F80ED");
+        if (axisVisibility.Y) drawTrace(history.y, "#F2994A");
+        if (axisVisibility.Z) drawTrace(history.z, "#10B981");
     }
 
     /*
-     * BIPOLAR VOLTAGE SCALE (-5.0V to +5.0V)
-     * Center at 0.0V
+     * 2. RENDER VOLTAGE WAVEFORM SIMULTANEOUSLY
      */
+    renderVoltageWaveform();
+}
+
+function renderVoltageWaveform() {
+    if (!voltageCanvas || !voltageCtx) return;
+
+    const rect = voltageCanvas.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return;
+
+    const width = rect.width;
+    const height = rect.height;
+
+    const marginLeft = 58;
+    const marginRight = 18;
+    const marginTop = 18;
+    const marginBottom = 42;
+
+    const graphLeft = marginLeft;
+    const graphRight = width - marginRight;
+    const graphTop = marginTop;
+    const graphBottom = height - marginBottom;
+    const graphWidth = graphRight - graphLeft;
+    const graphHeight = graphBottom - graphTop;
+
+    voltageCtx.clearRect(0, 0, width, height);
+    voltageCtx.fillStyle = "#10171B";
+    voltageCtx.fillRect(graphLeft, graphTop, graphWidth, graphHeight);
+
+    const history = triaxialHistory[waveformNode] || { x: [], y: [], z: [], vx: [], vy: [], vz: [] };
+
+    // BIPOLAR SCALE -5.0 V to +5.0 V with Center 0.0 V
     const yMin = -5.0;
     const yMax = 5.0;
 
-    const vxData = getVisibleData(history.vx || []);
-    const vyData = getVisibleData(history.vy || []);
-    const vzData = getVisibleData(history.vz || []);
-
-    /*
-     * HORIZONTAL GRID
-     * 5 ticks: +5.0, +2.5, 0.0, -2.5, -5.0
-     */
+    // HORIZONTAL GRID (ticks at +5.0, +2.5, 0.0, -2.5, -5.0)
     const horizontalTicks = 4;
     const tickValues = [5.0, 2.5, 0.0, -2.5, -5.0];
     const labelStrings = ["+5", "+2.5", "0", "-2.5", "-5"];
 
     voltageCtx.lineWidth = 1;
-
     for (let i = 0; i <= horizontalTicks; i++) {
         const val = tickValues[i];
         const y = graphTop + (i / horizontalTicks) * graphHeight;
@@ -1168,12 +693,9 @@ function renderVoltageWaveform() {
         voltageCtx.stroke();
     }
 
-    /*
-     * VERTICAL GRID (5 intervals matching -10s to 0s)
-     */
+    // VERTICAL GRID
     voltageCtx.strokeStyle = "rgba(255,255,255,0.08)";
     const verticalTicks = 5;
-
     for (let i = 0; i <= verticalTicks; i++) {
         const x = graphLeft + (i / verticalTicks) * graphWidth;
         voltageCtx.beginPath();
@@ -1182,9 +704,7 @@ function renderVoltageWaveform() {
         voltageCtx.stroke();
     }
 
-    /*
-     * Y-AXIS LABELS
-     */
+    // Y-AXIS LABELS
     voltageCtx.font = "12px Inter, Arial, sans-serif";
     voltageCtx.fillStyle = "rgba(220,230,235,0.72)";
     voltageCtx.textAlign = "right";
@@ -1195,124 +715,26 @@ function renderVoltageWaveform() {
         voltageCtx.fillText(labelStrings[i], graphLeft - 8, y);
     }
 
-    /*
-     * Y-AXIS UNIT LABEL
-     */
+    // Y-AXIS UNIT LABEL
     voltageCtx.font = "10px Inter, Arial, sans-serif";
     voltageCtx.fillStyle = "rgba(220,230,235,0.50)";
     voltageCtx.textAlign = "left";
     voltageCtx.textBaseline = "bottom";
     voltageCtx.fillText("VOLTAGE (V)", graphLeft, graphTop - 4);
 
-    /*
-     * REAL-TIME X-AXIS (-10s to 0s)
-     */
+    // X-AXIS LABELS (-10 s to 0 s)
     voltageCtx.font = "11px Inter, Arial, sans-serif";
     voltageCtx.fillStyle = "rgba(220,230,235,0.60)";
     voltageCtx.textAlign = "center";
     voltageCtx.textBaseline = "top";
 
-    const timeLabels = [
-        "-10 s",
-        "-7.5 s",
-        "-5 s",
-        "-2.5 s",
-        "0 s"
-    ];
-
+    const timeLabels = ["-10 s", "-7.5 s", "-5 s", "-2.5 s", "0 s"];
     for (let i = 0; i < timeLabels.length; i++) {
         const x = graphLeft + (i / (timeLabels.length - 1)) * graphWidth;
         voltageCtx.fillText(timeLabels[i], x, graphBottom + 10);
     }
 
-    /*
-     * DRAW VOLTAGE TRACE
-     */
-    function drawVoltageTrace(data, lineColor) {
-        if (!Array.isArray(data) || data.length < 2) {
-            return;
-        }
-
-        const displayCount = Math.min(
-            data.length,
-            Math.max(300, Math.floor(graphWidth * 1.5))
-        );
-
-        const stride = Math.max(1, Math.floor(data.length / displayCount));
-
-        voltageCtx.beginPath();
-        voltageCtx.strokeStyle = lineColor;
-        voltageCtx.lineWidth = 1.35;
-        voltageCtx.lineJoin = "round";
-        voltageCtx.lineCap = "round";
-
-        let started = false;
-
-        for (let index = 0; index < data.length; index += stride) {
-            let val = Number(data[index]);
-            if (!Number.isFinite(val)) {
-                continue;
-            }
-
-            val = Math.max(yMin, Math.min(yMax, val));
-
-            const x = graphLeft + (index / (data.length - 1)) * graphWidth;
-            const y = graphBottom - ((val - yMin) / (yMax - yMin)) * graphHeight;
-
-            if (!started) {
-                voltageCtx.moveTo(x, y);
-                started = true;
-            } else {
-                voltageCtx.lineTo(x, y);
-            }
-        }
-
-        const lastIndex = data.length - 1;
-        if (lastIndex >= 0) {
-            const lastVal = Number(data[lastIndex]);
-            if (Number.isFinite(lastVal)) {
-                const val = Math.max(yMin, Math.min(yMax, lastVal));
-                const x = graphRight;
-                const y = graphBottom - ((val - yMin) / (yMax - yMin)) * graphHeight;
-
-                if (!started) {
-                    voltageCtx.moveTo(x, y);
-                    started = true;
-                } else {
-                    voltageCtx.lineTo(x, y);
-                }
-            }
-        }
-
-        if (started) {
-            voltageCtx.stroke();
-        }
-    }
-
-    /*
-     * X CHANNEL (Blue: #2F80ED)
-     */
-    if (axisVisibility.X) {
-        drawVoltageTrace(vxData, "#2F80ED");
-    }
-
-    /*
-     * Y CHANNEL (Orange: #F2994A)
-     */
-    if (axisVisibility.Y) {
-        drawVoltageTrace(vyData, "#F2994A");
-    }
-
-    /*
-     * Z CHANNEL (Green: #10B981)
-     */
-    if (axisVisibility.Z) {
-        drawVoltageTrace(vzData, "#10B981");
-    }
-
-    /*
-     * GRAPH TOP LABELS
-     */
+    // TOP LABELS
     voltageCtx.font = "11px Inter, Arial, sans-serif";
     voltageCtx.textBaseline = "top";
     voltageCtx.textAlign = "left";
@@ -1324,12 +746,71 @@ function renderVoltageWaveform() {
     );
 
     voltageCtx.textAlign = "right";
-    voltageCtx.fillStyle = "#10B981";
-    voltageCtx.fillText(
-        `● LIVE • ${WAVEFORM_RATE_HZ} Hz`,
-        graphRight - 6,
-        graphTop + 5
-    );
+    if (waveformDisplayMode === "idle") {
+        voltageCtx.fillStyle = "rgba(220,230,235,0.45)";
+        voltageCtx.fillText("● READY", graphRight - 6, graphTop + 5);
+    } else {
+        voltageCtx.fillStyle = "#10B981";
+        voltageCtx.fillText(`● LIVE • ${WAVEFORM_RATE_HZ} Hz`, graphRight - 6, graphTop + 5);
+    }
+
+    // DRAW VOLTAGE TRACES ONLY IF NOT IDLE
+    if (waveformDisplayMode !== "idle") {
+        const maxPoints = WAVEFORM_DISPLAY_POINTS;
+
+        function drawVoltageTrace(data, lineColor) {
+            if (!Array.isArray(data) || data.length < 2) return;
+
+            const len = data.length;
+            const stride = Math.max(1, Math.floor(len / Math.max(300, Math.floor(graphWidth * 1.5))));
+
+            voltageCtx.beginPath();
+            voltageCtx.strokeStyle = lineColor;
+            voltageCtx.lineWidth = 1.35;
+            voltageCtx.lineJoin = "round";
+            voltageCtx.lineCap = "round";
+
+            let started = false;
+
+            for (let index = 0; index < len; index += stride) {
+                let val = Number(data[index]);
+                if (!Number.isFinite(val)) continue;
+                val = Math.max(yMin, Math.min(yMax, val));
+
+                const x = graphRight - ((len - 1 - index) / (maxPoints - 1)) * graphWidth;
+                const y = graphBottom - ((val - yMin) / (yMax - yMin)) * graphHeight;
+
+                if (!started) {
+                    voltageCtx.moveTo(x, y);
+                    started = true;
+                } else {
+                    voltageCtx.lineTo(x, y);
+                }
+            }
+
+            const lastIndex = len - 1;
+            let lastVal = Number(data[lastIndex]);
+            if (Number.isFinite(lastVal)) {
+                lastVal = Math.max(yMin, Math.min(yMax, lastVal));
+                const x = graphRight;
+                const y = graphBottom - ((lastVal - yMin) / (yMax - yMin)) * graphHeight;
+                if (!started) {
+                    voltageCtx.moveTo(x, y);
+                    started = true;
+                } else {
+                    voltageCtx.lineTo(x, y);
+                }
+            }
+
+            if (started) {
+                voltageCtx.stroke();
+            }
+        }
+
+        if (axisVisibility.X) drawVoltageTrace(history.vx, "#2F80ED");
+        if (axisVisibility.Y) drawVoltageTrace(history.vy, "#F2994A");
+        if (axisVisibility.Z) drawVoltageTrace(history.vz, "#10B981");
+    }
 }
 
 function initWebSocket() {
@@ -1475,10 +956,11 @@ function handleServerMessage(msg) {
 
 
         /*
-         * TRIGGER AT ADC THRESHOLD
+         * TRIGGER AT ADC THRESHOLD (Only in live hardware mode)
          */
 
         if (
+            waveformDisplayMode === "live" &&
             !simulationActive &&
             waveformMax >=
             ADC_ALERT_THRESHOLD
@@ -1501,7 +983,7 @@ function handleServerMessage(msg) {
 
         const nodeId = d.node_id;
 
-        if (triaxialHistory[nodeId]) {
+        if (waveformDisplayMode === "live" && triaxialHistory[nodeId]) {
 
             if (
                 simulationActive &&
@@ -2365,12 +1847,9 @@ function startLiveSimulationWaveform(
         0;
 
     /*
-     * Clear previous waveform.
+     * Clear previous waveform without prefilling fake data.
      */
-
-    const history =
-        triaxialHistory[nodeId];
-
+    const history = triaxialHistory[nodeId];
     if (!history) {
         return;
     }
@@ -2381,81 +1860,29 @@ function startLiveSimulationWaveform(
     if (history.vx) history.vx.length = 0;
     if (history.vy) history.vy.length = 0;
     if (history.vz) history.vz.length = 0;
-
     if (history.timestamps) {
         history.timestamps.length = 0;
     }
 
-    /*
-     * Pre-fill the 10-second rolling display window with dynamic background
-     * so that the waveform graph begins with natural ambient ground vibration
-     * rather than an empty canvas or flat zero.
-     */
-    const prefillSamples =
-        WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
-
-    for (let i = 0; i < prefillSamples; i++) {
-        const tPre = (i - prefillSamples) / WAVEFORM_RATE_HZ;
-        const xPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "x"))));
-        const yPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "y"))));
-        const zPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "z"))));
-        history.x.push(xPre);
-        history.y.push(yPre);
-        history.z.push(zPre);
-        if (history.vx) history.vx.push(adcToVoltage(xPre, "x"));
-        if (history.vy) history.vy.push(adcToVoltage(yPre, "y"));
-        if (history.vz) history.vz.push(adcToVoltage(zPre, "z"));
-        if (history.timestamps) {
-            history.timestamps.push(null);
-        }
-    }
+    waveformDisplayMode = "demo";
 
     /*
-     * Generate random impact locations for
-     * this species simulation.
+     * Generate random impact locations for this species.
      */
-
-    simulationImpacts =
-        createSimulationImpacts(
-            type
-        );
+    simulationImpacts = createSimulationImpacts(type);
 
     /*
-     * Start 200-Hz live sample generation.
+     * Start 200-Hz sample generation.
      */
-
-    simulationSampleTimer =
-        setInterval(
-            generateLiveSimulationSample,
-            SIMULATION_SAMPLE_INTERVAL_MS
-        );
+    simulationSampleTimer = setInterval(
+        generateLiveSimulationSample,
+        SIMULATION_SAMPLE_INTERVAL_MS
+    );
 
     /*
-     * Continuously redraw the graph.
+     * Start visual animation loop.
      */
-
-    simulationAnimationFrame =
-        requestAnimationFrame(
-            animateSimulationWaveform
-        );
-
-}
-
-function animateSimulationWaveform() {
-
-    if (
-        !simulationActive
-    ) {
-        return;
-    }
-
-    renderWaveform();
-
-    simulationAnimationFrame =
-        requestAnimationFrame(
-            animateSimulationWaveform
-        );
-
+    startWaveformAnimation();
 }
 
 function generateLiveSimulationSample() {
@@ -2611,42 +2038,18 @@ function generateLiveSimulationSample() {
 }
 
 function stopLiveSimulationWaveform() {
+    simulationActive = false;
+    waveformDisplayMode = "idle";
 
-    ambientSampleTime =
-        simulationSampleIndex / WAVEFORM_RATE_HZ;
-
-    simulationActive =
-        false;
-
-
-    if (
-        simulationSampleTimer
-    ) {
-
-        clearInterval(
-            simulationSampleTimer
-        );
-
-        simulationSampleTimer =
-            null;
+    if (simulationSampleTimer) {
+        clearInterval(simulationSampleTimer);
+        simulationSampleTimer = null;
     }
 
+    stopWaveformAnimation();
+    simulationNodeId = null;
 
-    if (
-        simulationAnimationFrame
-    ) {
-
-        cancelAnimationFrame(
-            simulationAnimationFrame
-        );
-
-        simulationAnimationFrame =
-            null;
-    }
-
-
-    simulationNodeId =
-        null;
+    renderWaveform();
 }
 
 function startContinuousSiren() {
@@ -2979,26 +2382,6 @@ function runFullDetectionDemo() {
     }
 
     /*
-     * Pre-fill 10-second rolling display window with dynamic background.
-     */
-    const prefillSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
-    for (let i = 0; i < prefillSamples; i++) {
-        const tPre = (i - prefillSamples) / WAVEFORM_RATE_HZ;
-        const xPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "x"))));
-        const yPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "y"))));
-        const zPre = Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "z"))));
-        history.x.push(xPre);
-        history.y.push(yPre);
-        history.z.push(zPre);
-        if (history.vx) history.vx.push(adcToVoltage(xPre, "x"));
-        if (history.vy) history.vy.push(adcToVoltage(yPre, "y"));
-        if (history.vz) history.vz.push(adcToVoltage(zPre, "z"));
-        if (history.timestamps) {
-            history.timestamps.push(null);
-        }
-    }
-
-    /*
      * Disable individual buttons and update Full Demo button.
      */
     setSimulationButtonsDisabled(true);
@@ -3008,6 +2391,7 @@ function runFullDetectionDemo() {
         demoBtn.textContent = "🎬 Demo Running (120s)...";
     }
 
+    waveformDisplayMode = "demo";
     fullDemoActive = true;
     simulationActive = true;
     simulationNodeId = nodeId;
@@ -3017,18 +2401,7 @@ function runFullDetectionDemo() {
     fullDemoImpacts = createFullDemoImpacts();
 
     fullDemoSampleTimer = setInterval(generateFullDemoSample, SIMULATION_SAMPLE_INTERVAL_MS);
-    fullDemoAnimationFrame = requestAnimationFrame(animateFullDemoWaveform);
-}
-
-function animateFullDemoWaveform() {
-
-    if (!fullDemoActive) {
-        return;
-    }
-
-    renderWaveform();
-
-    fullDemoAnimationFrame = requestAnimationFrame(animateFullDemoWaveform);
+    startWaveformAnimation();
 }
 
 function handleFullDemoPhaseTransition(previousPhase, currentPhase) {
@@ -3166,17 +2539,7 @@ function generateFullDemoSample() {
 
 function stopFullDetectionDemo() {
 
-    if (!fullDemoActive) {
-        setSimulationButtonsDisabled(false);
-        const demoBtn = document.getElementById("fullDetectionDemoBtn");
-        if (demoBtn) {
-            demoBtn.classList.remove("active");
-            demoBtn.textContent = "🎬 Full Detection Demo";
-        }
-        return;
-    }
-
-    ambientSampleTime = fullDemoSampleIndex / WAVEFORM_RATE_HZ;
+    waveformDisplayMode = "idle";
     fullDemoActive = false;
     simulationActive = false;
     simulationNodeId = null;
@@ -3186,11 +2549,7 @@ function stopFullDetectionDemo() {
         fullDemoSampleTimer = null;
     }
 
-    if (fullDemoAnimationFrame) {
-        cancelAnimationFrame(fullDemoAnimationFrame);
-        fullDemoAnimationFrame = null;
-    }
-
+    stopWaveformAnimation();
     stopSimulationAlarm();
     hideElephantDetectedAlert();
 
@@ -3367,14 +2726,29 @@ async function clearSimulation() {
          */
 
         hideElephantDetectedAlert();
-
         stopFullDetectionDemo();
-
         stopLiveSimulationWaveform();
-
         stopSimulationAlarm();
+        stopWaveformAnimation();
 
-        createInitialHistory();
+        waveformDisplayMode = "idle";
+        simulationActive = false;
+        fullDemoActive = false;
+
+        ["NODE_01", "NODE_02", "NODE_03"].forEach(id => {
+            if (triaxialHistory[id]) {
+                triaxialHistory[id].x = [];
+                triaxialHistory[id].y = [];
+                triaxialHistory[id].z = [];
+                triaxialHistory[id].vx = [];
+                triaxialHistory[id].vy = [];
+                triaxialHistory[id].vz = [];
+                if (triaxialHistory[id].timestamps) {
+                    triaxialHistory[id].timestamps = [];
+                }
+            }
+        });
+
         renderWaveform();
 
 
