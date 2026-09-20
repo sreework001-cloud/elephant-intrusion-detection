@@ -137,74 +137,309 @@ function generateDynamicBackground(t, axis = "x") {
 
 /*
  * ===============================================================
- * IRREGULAR TRANSIENT IMPACT GENERATOR
+ * SPECIES-SPECIFIC EVENT PROFILES & PHYSICAL GENERATORS
  * ===============================================================
- * Each impact has irregular timing, varying amplitude, and independent
- * coupling weights for X, Y, and Z so axes naturally cross during impacts.
+ * NORMAL:
+ *   - Environmental ground vibration & drift (generateDynamicBackground)
+ *   - Low energy, irregular, continuous, noisy, no rhythmic spikes
+ *
+ * ELEPHANT:
+ *   - Heavy irregular low-frequency impacts (2700 - 4200 ADC)
+ *   - Sharp onset, pronounced ringing (16-26 Hz) over 0.20-0.45s
+ *   - Deep ground displacement heave wave (4-7 Hz)
+ *   - Irregular timing between impacts (0.35 - 0.95s)
+ *   - Cyclic triaxial coupling permutations (X>Y>Z, Z>X>Y, Y>Z>X...)
+ *
+ * HUMAN:
+ *   - Small, short, isolated footsteps (700 - 1650 ADC, strictly < 1700 ADC)
+ *   - Fast rise (~18ms), very fast dissipation (~30ms)
+ *   - Quick negative rebound / heel-lift dip
+ *   - Minimal ringing (36-48 Hz, decays within 0.05s)
+ *   - Spaced 0.65 - 1.35s apart
+ *
+ * BOVID:
+ *   - Intermediate energy (1700 - 2400 ADC)
+ *   - Clustered hoof strikes (quadruped trot pairs / triplets)
+ *   - Sharp hoof strike, moderate ringing (22-34 Hz, 0.10-0.18s decay)
+ *   - Moderate rebound, pause between clusters
  */
-function createSimulationImpacts(species = "elephant") {
-    const impacts = [];
-    let tCur = 1.9;
-    const endEventTime = 8.6;
 
-    let baseAmpMin = 2400, baseAmpMax = 3600;
-    let widthMin = 0.07, widthMax = 0.12;
-    let freqMin = 20, freqMax = 28;
-    let stepMin = 0.65, stepMax = 1.10;
+const EVENT_PROFILES = {
+    elephant: {
+        amplitudeRange: [2700, 4200],
+        impactSpacing: [0.35, 0.95],
+        impactDuration: [0.08, 0.20],
+        ringingFrequency: [16, 26],
+        ringingDuration: [0.20, 0.45],
+        variability: 0.40
+    },
+    human: {
+        amplitudeRange: [700, 1650],
+        impactSpacing: [0.65, 1.35],
+        impactDuration: [0.025, 0.08],
+        ringingFrequency: [35, 52],
+        ringingDuration: [0.035, 0.075],
+        variability: 0.25
+    },
+    bovid: {
+        amplitudeRange: [1700, 2400],
+        impactSpacing: [0.35, 1.0],
+        impactDuration: [0.04, 0.13],
+        ringingFrequency: [20, 36],
+        ringingDuration: [0.08, 0.20],
+        variability: 0.35
+    }
+};
 
-    if (species === "human") {
-        baseAmpMin = 500;
-        baseAmpMax = 1100;
-        widthMin = 0.04;
-        widthMax = 0.075;
-        freqMin = 30;
-        freqMax = 42;
-        stepMin = 0.55;
-        stepMax = 0.95;
-    } else if (species === "bovid") {
-        baseAmpMin = 1250;
-        baseAmpMax = 1850;
-        widthMin = 0.05;
-        widthMax = 0.09;
-        freqMin = 24;
-        freqMax = 36;
-        stepMin = 0.50;
-        stepMax = 0.85;
+function getTriaxialCoupling(orderIndex = 0) {
+    const permutations = [
+        [0, 1, 2], // X > Y > Z
+        [2, 0, 1], // Z > X > Y
+        [1, 2, 0], // Y > Z > X
+        [0, 2, 1], // X > Z > Y
+        [1, 0, 2], // Y > X > Z
+        [2, 1, 0]  // Z > Y > X
+    ];
+    const perm = permutations[orderIndex % permutations.length];
+
+    const tiers = [
+        0.90 + Math.random() * 0.10, // Strong (0.90 - 1.00)
+        0.60 + Math.random() * 0.15, // Medium (0.60 - 0.75)
+        0.35 + Math.random() * 0.15  // Weak   (0.35 - 0.50)
+    ];
+
+    return {
+        wx: tiers[perm[0]],
+        wy: tiers[perm[1]],
+        wz: tiers[perm[2]],
+        phix: 0.0,
+        phiy: (2 * Math.PI / 3) + (Math.random() - 0.5) * 0.35,
+        phiz: (4 * Math.PI / 3) + (Math.random() - 0.5) * 0.35
+    };
+}
+
+function generateElephantImpact(impact, t, axis = "x") {
+    const dt = t - impact.center;
+    const rise = impact.riseTime;
+    const ringDecay = impact.ringingDecay;
+    if (dt < -rise || dt > ringDecay * 3.5) {
+        return 0.0;
     }
 
-    const variations = [0.8, 0.9, 1.0, 1.15, 0.85, 0.95, 1.05];
+    const w = impact[`w${axis}`] || 0.7;
+    const phi = impact[`phi${axis}`] || 0.0;
+    const freq = impact[`freq_${axis}`] || 20.0;
 
-    while (tCur < endEventTime) {
-        const ampVariation = variations[impacts.length % variations.length];
-        const amp = (baseAmpMin + Math.random() * (baseAmpMax - baseAmpMin)) * ampVariation;
+    if (dt < 0) {
+        const p = (dt + rise) / rise;
+        const riseEnv = 0.5 * (1 - Math.cos(Math.PI * p));
+        return impact.amplitude * w * riseEnv;
+    } else {
+        const primary = Math.exp(-dt / impact.decayTime);
+        const ringing = Math.exp(-dt / ringDecay) * Math.sin(2 * Math.PI * freq * dt + phi);
+        const heave = Math.exp(-dt / impact.heaveDecay) * Math.sin(2 * Math.PI * impact.heaveFreq * dt + phi * 0.7);
+        return impact.amplitude * w * (0.45 * primary + 0.40 * ringing + 0.15 * heave);
+    }
+}
 
-        // Independent X, Y, Z coupling weights: random dominant axis per impact
-        const weights = [
-            0.45 + Math.random() * 0.20,
-            0.65 + Math.random() * 0.20,
-            0.92 + Math.random() * 0.08
-        ];
-        for (let j = weights.length - 1; j > 0; j--) {
-            const k = Math.floor(Math.random() * (j + 1));
-            [weights[j], weights[k]] = [weights[k], weights[j]];
-        }
+function generateHumanImpact(impact, t, axis = "x") {
+    const dt = t - impact.center;
+    const rise = impact.riseTime;
+    if (dt < -rise || dt > 0.18) {
+        return 0.0;
+    }
 
+    const w = impact[`w${axis}`] || 0.7;
+    const phi = impact[`phi${axis}`] || 0.0;
+    const freq = impact[`freq_${axis}`] || 40.0;
+
+    if (dt < 0) {
+        const p = (dt + rise) / rise;
+        const riseEnv = 0.5 * (1 - Math.cos(Math.PI * p));
+        return impact.amplitude * w * riseEnv;
+    } else {
+        const primary = Math.exp(-dt / impact.decayTime);
+        const tap = Math.exp(-dt / impact.ringingDecay) * Math.sin(2 * Math.PI * freq * dt + phi);
+        const rebound = (dt >= 0.025 && dt <= 0.095)
+            ? -0.32 * Math.sin(Math.PI * (dt - 0.025) / 0.070)
+            : 0.0;
+        return impact.amplitude * w * (0.75 * primary + 0.25 * tap + rebound);
+    }
+}
+
+function generateBovidImpact(impact, t, axis = "x") {
+    const dt = t - impact.center;
+    const rise = impact.riseTime;
+    if (dt < -rise || dt > 0.30) {
+        return 0.0;
+    }
+
+    const w = impact[`w${axis}`] || 0.7;
+    const phi = impact[`phi${axis}`] || 0.0;
+    const freq = impact[`freq_${axis}`] || 28.0;
+
+    if (dt < 0) {
+        const p = (dt + rise) / rise;
+        const riseEnv = 0.5 * (1 - Math.cos(Math.PI * p));
+        return impact.amplitude * w * riseEnv;
+    } else {
+        const primary = Math.exp(-dt / impact.decayTime);
+        const ringing = Math.exp(-dt / impact.ringingDecay) * Math.sin(2 * Math.PI * freq * dt + phi);
+        const rebound = (dt >= 0.035 && dt <= 0.130)
+            ? -0.16 * Math.sin(Math.PI * (dt - 0.035) / 0.095)
+            : 0.0;
+        return impact.amplitude * w * (0.60 * primary + 0.40 * ringing + rebound);
+    }
+}
+
+function generateSpeciesImpact(impact, t, axis = "x") {
+    if (!impact) return 0.0;
+    if (impact.species === "elephant") {
+        return generateElephantImpact(impact, t, axis);
+    } else if (impact.species === "human") {
+        return generateHumanImpact(impact, t, axis);
+    } else if (impact.species === "bovid") {
+        return generateBovidImpact(impact, t, axis);
+    }
+    return 0.0;
+}
+
+function createElephantImpacts(startTime, endTime, isApproach = false) {
+    const impacts = [];
+    if (isApproach) {
+        const approachSteps = [0.15, 0.32, 0.50, 0.68, 0.84, 0.96];
+        const span = endTime - startTime;
+        approachSteps.forEach((frac, idx) => {
+            const t = startTime + frac * span;
+            const amp = 650 + frac * 1050 + Math.random() * 150;
+            const c = getTriaxialCoupling(idx);
+            const fBase = 18 + Math.random() * 4;
+            impacts.push({
+                species: "elephant",
+                center: t,
+                amplitude: amp,
+                riseTime: 0.035,
+                decayTime: 0.13,
+                ringingDecay: 0.20,
+                heaveDecay: 0.25,
+                heaveFreq: 5.0,
+                freq_x: fBase,
+                freq_y: fBase + 1.2,
+                freq_z: fBase - 1.2,
+                ...c
+            });
+        });
+        return impacts;
+    }
+
+    let tCur = startTime + 0.2;
+    const elephantVariations = [1.02, 1.15, 0.90, 1.18, 0.94, 1.08, 0.88, 1.12];
+    let eIdx = 0;
+    while (tCur < endTime) {
+        const varFactor = elephantVariations[eIdx % elephantVariations.length];
+        const amp = (2750 + Math.random() * 850) * varFactor;
+        const c = getTriaxialCoupling(eIdx);
+        const fBase = 17 + Math.random() * 6;
         impacts.push({
+            species: "elephant",
             center: tCur,
             amplitude: amp,
-            width: widthMin + Math.random() * (widthMax - widthMin),
-            wx: weights[0],
-            wy: weights[1],
-            wz: weights[2],
-            freq_x: freqMin + Math.random() * (freqMax - freqMin),
-            freq_y: freqMin + Math.random() * (freqMax - freqMin),
-            freq_z: freqMin + Math.random() * (freqMax - freqMin)
+            riseTime: 0.035 + Math.random() * 0.015,
+            decayTime: 0.14 + Math.random() * 0.06,
+            ringingDecay: 0.24 + Math.random() * 0.14,
+            heaveDecay: 0.28 + Math.random() * 0.12,
+            heaveFreq: 4.5 + Math.random() * 1.8,
+            freq_x: fBase,
+            freq_y: fBase + 1.5,
+            freq_z: fBase - 1.5,
+            ...c
+        });
+        tCur += 0.38 + Math.random() * 0.58;
+        eIdx++;
+    }
+    return impacts;
+}
+
+function createHumanImpacts(startTime, endTime) {
+    const impacts = [];
+    let tCur = startTime + 0.3;
+    let hIdx = 0;
+    while (tCur < endTime) {
+        const amp = 750 + Math.random() * 650; // 750 - 1400 ADC (strictly < 1700 ADC)
+        const c = getTriaxialCoupling(hIdx);
+        const fBase = 38 + Math.random() * 10;
+        impacts.push({
+            species: "human",
+            center: tCur,
+            amplitude: amp,
+            riseTime: 0.018 + Math.random() * 0.005,
+            decayTime: 0.028 + Math.random() * 0.008,
+            ringingDecay: 0.040 + Math.random() * 0.020,
+            freq_x: fBase,
+            freq_y: fBase + 2.0,
+            freq_z: fBase - 2.0,
+            ...c
+        });
+        tCur += 0.70 + Math.random() * 0.55; // 0.70 - 1.25s isolated footsteps
+        hIdx++;
+    }
+    return impacts;
+}
+
+function createBovidImpacts(startTime, endTime) {
+    const impacts = [];
+    let tCur = startTime + 0.3;
+    let bIdx = 0;
+    while (tCur < endTime - 0.2) {
+        // Leading hoof strike
+        const amp1 = 1450 + Math.random() * 450; // 1450 - 1900 ADC
+        const c1 = getTriaxialCoupling(bIdx);
+        const fBase = 25 + Math.random() * 8;
+        impacts.push({
+            species: "bovid",
+            center: tCur,
+            amplitude: amp1,
+            riseTime: 0.025 + Math.random() * 0.007,
+            decayTime: 0.060 + Math.random() * 0.018,
+            ringingDecay: 0.110 + Math.random() * 0.045,
+            freq_x: fBase,
+            freq_y: fBase + 1.8,
+            freq_z: fBase - 1.8,
+            ...c1
         });
 
-        tCur += stepMin + Math.random() * (stepMax - stepMin);
-    }
+        // Trailing hoof strike (0.14 - 0.21s later)
+        const tPair = tCur + 0.14 + Math.random() * 0.07;
+        const amp2 = amp1 * (0.78 + Math.random() * 0.14);
+        const c2 = getTriaxialCoupling(bIdx + 1);
+        impacts.push({
+            species: "bovid",
+            center: tPair,
+            amplitude: amp2,
+            riseTime: 0.025 + Math.random() * 0.007,
+            decayTime: 0.060 + Math.random() * 0.018,
+            ringingDecay: 0.110 + Math.random() * 0.045,
+            freq_x: fBase + 1.0,
+            freq_y: fBase - 1.0,
+            freq_z: fBase + 2.0,
+            ...c2
+        });
 
+        // Interval pause before next hoof pair (0.50 - 0.85s)
+        tCur = tPair + 0.50 + Math.random() * 0.35;
+        bIdx += 2;
+    }
     return impacts;
+}
+
+function createSimulationImpacts(species = "elephant") {
+    if (species === "human") {
+        return createHumanImpacts(1.0, 19.0);
+    } else if (species === "bovid") {
+        return createBovidImpacts(1.0, 19.0);
+    } else {
+        return createElephantImpacts(1.0, 19.0, false);
+    }
 }
 
 const SIMULATION_ALARM_DURATION_MS = 10000;
@@ -1951,19 +2186,9 @@ function generateLiveSimulationSample() {
     let eventZ = 0;
 
     for (const impact of simulationImpacts) {
-        const distance = t - impact.center;
-        if (Math.abs(distance) > impact.width * 4.0) {
-            continue;
-        }
-
-        const envelope = Math.exp(-Math.abs(distance) / impact.width);
-        const ringX = Math.sin(2 * Math.PI * impact.freq_x * distance);
-        const ringY = Math.sin(2 * Math.PI * impact.freq_y * distance);
-        const ringZ = Math.sin(2 * Math.PI * impact.freq_z * distance);
-
-        eventX += impact.amplitude * impact.wx * envelope * (0.55 + 0.45 * ringX);
-        eventY += impact.amplitude * impact.wy * envelope * (0.55 + 0.45 * ringY);
-        eventZ += impact.amplitude * impact.wz * envelope * (0.55 + 0.45 * ringZ);
+        eventX += generateSpeciesImpact(impact, t, "x");
+        eventY += generateSpeciesImpact(impact, t, "y");
+        eventZ += generateSpeciesImpact(impact, t, "z");
     }
 
     const xADC = Math.round(Math.max(0, Math.min(5000, bgX + eventX)));
@@ -2249,119 +2474,41 @@ function setSimulationButtonsDisabled(disabled) {
 function createFullDemoImpacts() {
     const impacts = [];
 
-    function getShuffledWeights() {
-        const weights = [
-            0.45 + Math.random() * 0.20,
-            0.65 + Math.random() * 0.20,
-            0.92 + Math.random() * 0.08
-        ];
-        for (let j = weights.length - 1; j > 0; j--) {
-            const k = Math.floor(Math.random() * (j + 1));
-            [weights[j], weights[k]] = [weights[k], weights[j]];
-        }
-        return weights;
-    }
+    // 1. ELEPHANT APPROACH (20.0s -> 27.0s)
+    // Low-energy distant footsteps gradually approaching (peaks stay strictly below 2500 ADC)
+    const approachImpacts = createElephantImpacts(20.0, 27.0, true);
+    impacts.push(...approachImpacts);
 
-    /*
-     * 1. ELEPHANT APPROACH (20.0s -> 27.0s)
-     * Vibration energy gradually ramps up, peaks stay strictly below 2500 ADC.
-     */
-    const approachTimes = [20.8, 22.2, 23.6, 24.8, 25.8, 26.6];
-    approachTimes.forEach((t, idx) => {
-        const progress = idx / (approachTimes.length - 1);
-        const amp = 700 + progress * 1000 + Math.random() * 200;
-        const w = getShuffledWeights();
+    // 2. MAIN ELEPHANT EVENT (27.0s -> 58.0s)
+    // Heavy transient impacts crossing 2500 ADC, peaks 2750 - 4150 ADC, long ringing tail & heave
+    const elephantImpacts = createElephantImpacts(27.4, 57.6, false);
+    impacts.push(...elephantImpacts);
+
+    // 3. HUMAN EVENT (66.0s -> 74.0s)
+    // 7 distinct isolated footsteps across the 8-second window (strictly below 1700 ADC)
+    const humanTimes = [66.7, 67.6, 68.8, 69.5, 70.7, 71.8, 72.9];
+    humanTimes.forEach((t, idx) => {
+        const amp = 750 + Math.random() * 650; // 750 - 1400 ADC
+        const c = getTriaxialCoupling(idx);
+        const fBase = 38 + Math.random() * 10;
         impacts.push({
+            species: "human",
             center: t,
             amplitude: amp,
-            width: 0.07 + Math.random() * 0.03,
-            wx: w[0],
-            wy: w[1],
-            wz: w[2],
-            freq_x: 20 + Math.random() * 6,
-            freq_y: 20 + Math.random() * 6,
-            freq_z: 20 + Math.random() * 6
+            riseTime: 0.018 + Math.random() * 0.005,
+            decayTime: 0.028 + Math.random() * 0.008,
+            ringingDecay: 0.040 + Math.random() * 0.020,
+            freq_x: fBase,
+            freq_y: fBase + 2.0,
+            freq_z: fBase - 2.0,
+            ...c
         });
     });
 
-    /*
-     * 2. MAIN ELEPHANT EVENT (27.0s -> 58.0s)
-     * Heavy transient impacts crossing 2500 ADC, peaks 2700 - 4200 ADC.
-     */
-    let tCur = 27.4;
-    const elephantVariations = [0.95, 1.08, 0.88, 1.14, 0.92, 1.0, 1.16, 0.90];
-    let eIdx = 0;
-    while (tCur < 57.6) {
-        const varFactor = elephantVariations[eIdx % elephantVariations.length];
-        eIdx++;
-        const baseAmp = 2700 + Math.random() * 1000;
-        const amp = baseAmp * varFactor;
-        const w = getShuffledWeights();
-        impacts.push({
-            center: tCur,
-            amplitude: amp,
-            width: 0.08 + Math.random() * 0.04,
-            wx: w[0],
-            wy: w[1],
-            wz: w[2],
-            freq_x: 20 + Math.random() * 8,
-            freq_y: 20 + Math.random() * 8,
-            freq_z: 20 + Math.random() * 8
-        });
-        tCur += 1.1 + Math.random() * 0.65;
-    }
-
-    /*
-     * 3. HUMAN EVENT (66.0s -> 74.0s)
-     * Human footsteps below 1700 ADC (approx 700 - 1650 ADC total).
-     */
-    tCur = 66.5;
-    const humanVariations = [0.85, 1.0, 0.9, 1.1, 0.95, 1.05];
-    let hIdx = 0;
-    while (tCur < 73.6) {
-        const varFactor = humanVariations[hIdx % humanVariations.length];
-        hIdx++;
-        const amp = (650 + Math.random() * 550) * varFactor;
-        const w = getShuffledWeights();
-        impacts.push({
-            center: tCur,
-            amplitude: amp,
-            width: 0.04 + Math.random() * 0.035,
-            wx: w[0],
-            wy: w[1],
-            wz: w[2],
-            freq_x: 30 + Math.random() * 12,
-            freq_y: 30 + Math.random() * 12,
-            freq_z: 30 + Math.random() * 12
-        });
-        tCur += 0.55 + Math.random() * 0.35;
-    }
-
-    /*
-     * 4. BOVID EVENT (81.0s -> 97.0s)
-     * Intermediate disturbance, peaks 1700 - 2400 ADC.
-     */
-    tCur = 81.5;
-    const bovidVariations = [0.92, 1.06, 0.88, 1.1, 0.95, 1.02];
-    let bIdx = 0;
-    while (tCur < 96.6) {
-        const varFactor = bovidVariations[bIdx % bovidVariations.length];
-        bIdx++;
-        const amp = (1400 + Math.random() * 550) * varFactor;
-        const w = getShuffledWeights();
-        impacts.push({
-            center: tCur,
-            amplitude: amp,
-            width: 0.05 + Math.random() * 0.04,
-            wx: w[0],
-            wy: w[1],
-            wz: w[2],
-            freq_x: 24 + Math.random() * 12,
-            freq_y: 24 + Math.random() * 12,
-            freq_z: 24 + Math.random() * 12
-        });
-        tCur += 0.50 + Math.random() * 0.38;
-    }
+    // 4. BOVID EVENT (81.0s -> 97.0s)
+    // Clustered quadruped hoof strikes (1720 - 2380 ADC) with moderate ringing
+    const bovidImpacts = createBovidImpacts(81.5, 96.6);
+    impacts.push(...bovidImpacts);
 
     return impacts;
 }
@@ -2492,19 +2639,9 @@ function generateFullDemoSample() {
     let eventZ = 0;
 
     for (const impact of fullDemoImpacts) {
-        const distance = t - impact.center;
-        if (Math.abs(distance) > impact.width * 4.0) {
-            continue;
-        }
-
-        const envelope = Math.exp(-Math.abs(distance) / impact.width);
-        const ringX = Math.sin(2 * Math.PI * impact.freq_x * distance);
-        const ringY = Math.sin(2 * Math.PI * impact.freq_y * distance);
-        const ringZ = Math.sin(2 * Math.PI * impact.freq_z * distance);
-
-        eventX += impact.amplitude * impact.wx * envelope * (0.55 + 0.45 * ringX);
-        eventY += impact.amplitude * impact.wy * envelope * (0.55 + 0.45 * ringY);
-        eventZ += impact.amplitude * impact.wz * envelope * (0.55 + 0.45 * ringZ);
+        eventX += generateSpeciesImpact(impact, t, "x");
+        eventY += generateSpeciesImpact(impact, t, "y");
+        eventZ += generateSpeciesImpact(impact, t, "z");
     }
 
     const xADC = Math.round(Math.max(0, Math.min(5000, bgX + eventX)));
