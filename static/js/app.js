@@ -6,10 +6,13 @@ let canvas, ctx;
 let stftCanvas, stftCtx;
 
 const WAVEFORM_RATE_HZ = 200;
-const WAVEFORM_HISTORY_SECONDS = 60;
+const WAVEFORM_HISTORY_SECONDS = 20;
 const maxHistoryPoints = WAVEFORM_RATE_HZ * WAVEFORM_HISTORY_SECONDS;
 const WAVEFORM_DISPLAY_SECONDS = 10;
 const WAVEFORM_DISPLAY_POINTS = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+
+const WAVEFORM_UPDATE_INTERVAL_MS = 50;
+let lastWaveformRenderTime = 0;
 
 let currentStftNode = "NODE_01";
 let currentStftIntrusion = false;
@@ -125,55 +128,24 @@ function getVisibleData(data) {
         : data.slice(data.length - WAVEFORM_DISPLAY_POINTS);
 }
 
-function removeDisplayBaseline(data) {
-    if (!Array.isArray(data) || data.length === 0) return [];
-
-    let sum = 0;
-    let count = 0;
-
-    for (const value of data) {
-        const n = Number(value);
-        if (Number.isFinite(n)) {
-            sum += n;
-            count++;
-        }
-    }
-
-    if (count === 0) return [];
-
-    const mean = sum / count;
-
-    return data.map(value => {
-        const n = Number(value);
-        return Number.isFinite(n) ? n - mean : 0;
-    });
-}
-
-function getDisplayScale(seriesList) {
-    let maxAbs = 0;
-
-    for (const series of seriesList) {
-        for (const value of series) {
-            const n = Math.abs(Number(value));
-            if (Number.isFinite(n)) maxAbs = Math.max(maxAbs, n);
-        }
-    }
-
-    if (maxAbs < 1) return 1;
-    if (maxAbs < 2) return 2;
-    if (maxAbs < 5) return 5;
-    if (maxAbs < 10) return 10;
-    if (maxAbs < 20) return 20;
-    return Math.ceil(maxAbs / 10) * 10;
-}
-
-function renderWaveform() {
+function renderWaveform(timestamp = 0) {
     if (!canvas || !ctx) {
         requestAnimationFrame(renderWaveform);
         return;
     }
 
+    if (
+        lastWaveformRenderTime !== 0 &&
+        timestamp - lastWaveformRenderTime < WAVEFORM_UPDATE_INTERVAL_MS
+    ) {
+        requestAnimationFrame(renderWaveform);
+        return;
+    }
+
+    lastWaveformRenderTime = timestamp;
+
     const rect = canvas.getBoundingClientRect();
+
     if (rect.width <= 0 || rect.height <= 0) {
         requestAnimationFrame(renderWaveform);
         return;
@@ -183,6 +155,7 @@ function renderWaveform() {
 
     const width = rect.width;
     const height = rect.height;
+
     const marginLeft = 58;
     const marginRight = 18;
     const marginTop = 18;
@@ -192,39 +165,56 @@ function renderWaveform() {
     const graphRight = width - marginRight;
     const graphTop = marginTop;
     const graphBottom = height - marginBottom;
+
     const graphWidth = graphRight - graphLeft;
     const graphHeight = graphBottom - graphTop;
 
     ctx.clearRect(0, 0, width, height);
+
     ctx.fillStyle = "#10171B";
-    ctx.fillRect(graphLeft, graphTop, graphWidth, graphHeight);
+    ctx.fillRect(
+        graphLeft,
+        graphTop,
+        graphWidth,
+        graphHeight
+    );
 
     const history = triaxialHistory[waveformNode];
+
     if (!history) {
         requestAnimationFrame(renderWaveform);
         return;
     }
 
-    const xData = removeDisplayBaseline(getVisibleData(history.x));
-    const yData = removeDisplayBaseline(getVisibleData(history.y));
-    const zData = removeDisplayBaseline(getVisibleData(history.z));
+    const xData = getVisibleData(history.x);
+    const yData = getVisibleData(history.y);
+    const zData = getVisibleData(history.z);
 
     const visibleSeries = [];
+
     if (axisVisibility.X) visibleSeries.push(xData);
     if (axisVisibility.Y) visibleSeries.push(yData);
     if (axisVisibility.Z) visibleSeries.push(zData);
 
     const scale = getDisplayScale(visibleSeries);
+
     const yMin = -scale;
     const yMax = scale;
 
-    // Grid
+    /*
+     * GRID
+     */
+
     ctx.lineWidth = 1;
     ctx.strokeStyle = "rgba(255,255,255,0.08)";
 
     const horizontalTicks = 4;
+
     for (let i = 0; i <= horizontalTicks; i++) {
-        const y = graphTop + (i / horizontalTicks) * graphHeight;
+        const y =
+            graphTop +
+            (i / horizontalTicks) * graphHeight;
+
         ctx.beginPath();
         ctx.moveTo(graphLeft, y);
         ctx.lineTo(graphRight, y);
@@ -232,66 +222,144 @@ function renderWaveform() {
     }
 
     const verticalTicks = 5;
+
     for (let i = 0; i <= verticalTicks; i++) {
-        const x = graphLeft + (i / verticalTicks) * graphWidth;
+        const x =
+            graphLeft +
+            (i / verticalTicks) * graphWidth;
+
         ctx.beginPath();
         ctx.moveTo(x, graphTop);
         ctx.lineTo(x, graphBottom);
         ctx.stroke();
     }
 
-    // Zero reference line
-    const zeroY = graphBottom - ((0 - yMin) / (yMax - yMin)) * graphHeight;
+    /*
+     * ZERO LINE
+     */
+
+    const zeroY =
+        graphBottom -
+        ((0 - yMin) / (yMax - yMin)) *
+            graphHeight;
+
     ctx.strokeStyle = "rgba(255,255,255,0.30)";
     ctx.lineWidth = 1.4;
+
     ctx.beginPath();
     ctx.moveTo(graphLeft, zeroY);
     ctx.lineTo(graphRight, zeroY);
     ctx.stroke();
 
-    // Y-axis labels
+    /*
+     * Y AXIS
+     * Y = ADC AMPLITUDE
+     */
+
     ctx.font = "12px Inter, Arial, sans-serif";
     ctx.fillStyle = "rgba(220,230,235,0.72)";
     ctx.textAlign = "right";
     ctx.textBaseline = "middle";
 
     for (let i = 0; i <= horizontalTicks; i++) {
-        const value = yMax - (i / horizontalTicks) * (yMax - yMin);
-        const y = graphTop + (i / horizontalTicks) * graphHeight;
-        ctx.fillText(`${Number(value.toFixed(1))}`, graphLeft - 8, y);
+        const value =
+            yMax -
+            (i / horizontalTicks) *
+                (yMax - yMin);
+
+        const y =
+            graphTop +
+            (i / horizontalTicks) *
+                graphHeight;
+
+        ctx.fillText(
+            `${Number(value.toFixed(1))}`,
+            graphLeft - 8,
+            y
+        );
     }
 
-    // Unit label
     ctx.save();
-    ctx.translate(15, graphTop + graphHeight / 2);
+
+    ctx.translate(
+        15,
+        graphTop + graphHeight / 2
+    );
+
     ctx.rotate(-Math.PI / 2);
+
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
+
     ctx.font = "11px Inter, Arial, sans-serif";
     ctx.fillStyle = "rgba(220,230,235,0.60)";
-    ctx.fillText("mm/s", 0, 0);
+
+    ctx.fillText(
+        "ADC Amplitude",
+        0,
+        0
+    );
+
     ctx.restore();
 
-    // Time labels
+    /*
+     * X AXIS
+     * X = TIME
+     */
+
     ctx.font = "11px Inter, Arial, sans-serif";
     ctx.fillStyle = "rgba(220,230,235,0.60)";
     ctx.textAlign = "center";
     ctx.textBaseline = "top";
 
-    const timeLabels = ["-10 s", "-7.5 s", "-5 s", "-2.5 s", "0 s"];
+    const timeLabels = [
+        "-10 s",
+        "-7.5 s",
+        "-5 s",
+        "-2.5 s",
+        "0 s"
+    ];
+
     for (let i = 0; i < timeLabels.length; i++) {
-        const x = graphLeft + (i / (timeLabels.length - 1)) * graphWidth;
-        ctx.fillText(timeLabels[i], x, graphBottom + 10);
+
+        const x =
+            graphLeft +
+            (i / (timeLabels.length - 1)) *
+                graphWidth;
+
+        ctx.fillText(
+            timeLabels[i],
+            x,
+            graphBottom + 10
+        );
     }
 
     function drawTrace(data, lineColor) {
-        if (!Array.isArray(data) || data.length < 2) return;
 
-        const displayCount = Math.min(
-            data.length,
-            Math.max(300, Math.floor(graphWidth * 1.5))
-        );
-        const stride = Math.max(1, Math.floor(data.length / displayCount));
+        if (
+            !Array.isArray(data) ||
+            data.length < 2
+        ) {
+            return;
+        }
+
+        const displayCount =
+            Math.min(
+                data.length,
+                Math.max(
+                    300,
+                    Math.floor(graphWidth * 1.5)
+                )
+            );
+
+        const stride =
+            Math.max(
+                1,
+                Math.floor(
+                    data.length /
+                        displayCount
+                )
+            );
 
         ctx.beginPath();
         ctx.strokeStyle = lineColor;
@@ -301,14 +369,39 @@ function renderWaveform() {
 
         let started = false;
 
-        for (let index = 0; index < data.length; index += stride) {
-            let value = Number(data[index]);
-            if (!Number.isFinite(value)) continue;
+        for (
+            let index = 0;
+            index < data.length;
+            index += stride
+        ) {
 
-            value = Math.max(yMin, Math.min(yMax, value));
+            const value =
+                Number(data[index]);
 
-            const x = graphLeft + (index / (data.length - 1)) * graphWidth;
-            const y = graphBottom - ((value - yMin) / (yMax - yMin)) * graphHeight;
+            if (!Number.isFinite(value)) {
+                continue;
+            }
+
+            const clippedValue =
+                Math.max(
+                    yMin,
+                    Math.min(
+                        yMax,
+                        value
+                    )
+                );
+
+            const x =
+                graphLeft +
+                (index /
+                    (data.length - 1)) *
+                    graphWidth;
+
+            const y =
+                graphBottom -
+                ((clippedValue - yMin) /
+                    (yMax - yMin)) *
+                    graphHeight;
 
             if (!started) {
                 ctx.moveTo(x, y);
@@ -318,39 +411,96 @@ function renderWaveform() {
             }
         }
 
-        const lastIndex = data.length - 1;
-        if (lastIndex >= 0) {
-            const lastValue = Number(data[lastIndex]);
-            if (Number.isFinite(lastValue)) {
-                const value = Math.max(yMin, Math.min(yMax, lastValue));
-                const x = graphRight;
-                const y = graphBottom - ((value - yMin) / (yMax - yMin)) * graphHeight;
-                if (!started) ctx.moveTo(x, y);
-                else ctx.lineTo(x, y);
+        const lastIndex =
+            data.length - 1;
+
+        const lastValue =
+            Number(data[lastIndex]);
+
+        if (
+            Number.isFinite(lastValue)
+        ) {
+
+            const clippedValue =
+                Math.max(
+                    yMin,
+                    Math.min(
+                        yMax,
+                        lastValue
+                    )
+                );
+
+            const x = graphRight;
+
+            const y =
+                graphBottom -
+                ((clippedValue - yMin) /
+                    (yMax - yMin)) *
+                    graphHeight;
+
+            if (!started) {
+                ctx.moveTo(x, y);
+            } else {
+                ctx.lineTo(x, y);
             }
         }
 
-        if (started) ctx.stroke();
+        if (started) {
+            ctx.stroke();
+        }
     }
 
-    if (axisVisibility.X) drawTrace(xData, "#2F80ED");
-    if (axisVisibility.Y) drawTrace(yData, "#F2994A");
-    if (axisVisibility.Z) drawTrace(zData, "#10B981");
+    if (axisVisibility.X) {
+        drawTrace(
+            xData,
+            "#2F80ED"
+        );
+    }
 
-    // Top labels
-    ctx.font = "11px Inter, Arial, sans-serif";
+    if (axisVisibility.Y) {
+        drawTrace(
+            yData,
+            "#F2994A"
+        );
+    }
+
+    if (axisVisibility.Z) {
+        drawTrace(
+            zData,
+            "#10B981"
+        );
+    }
+
+    /*
+     * TOP LABEL
+     */
+
+    ctx.font =
+        "11px Inter, Arial, sans-serif";
+
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(220,230,235,0.60)";
+
+    ctx.fillStyle =
+        "rgba(220,230,235,0.60)";
+
     ctx.fillText(
-        `${waveformNode.replace("NODE_", "G")} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
+        `${waveformNode.replace(
+            "NODE_",
+            "G"
+        )} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
         graphLeft + 8,
         graphTop + 5
     );
 
     ctx.textAlign = "right";
     ctx.fillStyle = "#10B981";
-    ctx.fillText("● LIVE • 200 Hz", graphRight - 6, graphTop + 5);
+
+    ctx.fillText(
+        `● LIVE • ${WAVEFORM_RATE_HZ} Hz`,
+        graphRight - 6,
+        graphTop + 5
+    );
 
     requestAnimationFrame(renderWaveform);
 }
@@ -400,12 +550,17 @@ function handleServerMessage(msg) {
     }
 
     if (msg.type === "TELEMETRY_UPDATE") {
+
         const d = msg.data || {};
+
         updateNodeUI(d);
 
         const nodeId = d.node_id;
+
         if (triaxialHistory[nodeId]) {
-            const history = triaxialHistory[nodeId];
+
+            const history =
+                triaxialHistory[nodeId];
 
             if (
                 Array.isArray(d.wave_x) &&
@@ -413,25 +568,119 @@ function handleServerMessage(msg) {
                 Array.isArray(d.wave_z) &&
                 d.wave_x.length > 0
             ) {
-                history.x.push(...d.wave_x.map(Number));
-                history.y.push(...d.wave_y.map(Number));
-                history.z.push(...d.wave_z.map(Number));
 
-                if (history.x.length > maxHistoryPoints) history.x.splice(0, history.x.length - maxHistoryPoints);
-                if (history.y.length > maxHistoryPoints) history.y.splice(0, history.y.length - maxHistoryPoints);
-                if (history.z.length > maxHistoryPoints) history.z.splice(0, history.z.length - maxHistoryPoints);
+                const sampleCount =
+                    Math.min(
+                        d.wave_x.length,
+                        d.wave_y.length,
+                        d.wave_z.length
+                    );
+
+                for (
+                    let i = 0;
+                    i < sampleCount;
+                    i++
+                ) {
+
+                    history.x.push(
+                        Number(d.wave_x[i])
+                    );
+
+                    history.y.push(
+                        Number(d.wave_y[i])
+                    );
+
+                    history.z.push(
+                        Number(d.wave_z[i])
+                    );
+                }
+
+                if (
+                    history.x.length >
+                    maxHistoryPoints
+                ) {
+                    history.x.splice(
+                        0,
+                        history.x.length -
+                            maxHistoryPoints
+                    );
+                }
+
+                if (
+                    history.y.length >
+                    maxHistoryPoints
+                ) {
+                    history.y.splice(
+                        0,
+                        history.y.length -
+                            maxHistoryPoints
+                    );
+                }
+
+                if (
+                    history.z.length >
+                    maxHistoryPoints
+                ) {
+                    history.z.splice(
+                        0,
+                        history.z.length -
+                            maxHistoryPoints
+                    );
+                }
+
             } else {
-                history.x.push(safeNum(d.vib_x, safeNum(d.vibration_val, 0)));
-                history.y.push(safeNum(d.vib_y, safeNum(d.vibration_val, 0)));
-                history.z.push(safeNum(d.vib_z, safeNum(d.vibration_val, 0)));
 
-                if (history.x.length > maxHistoryPoints) history.x.shift();
-                if (history.y.length > maxHistoryPoints) history.y.shift();
-                if (history.z.length > maxHistoryPoints) history.z.shift();
+                history.x.push(
+                    safeNum(
+                        d.vib_x,
+                        0
+                    )
+                );
+
+                history.y.push(
+                    safeNum(
+                        d.vib_y,
+                        0
+                    )
+                );
+
+                history.z.push(
+                    safeNum(
+                        d.vib_z,
+                        0
+                    )
+                );
+
+                if (
+                    history.x.length >
+                    maxHistoryPoints
+                ) {
+                    history.x.shift();
+                }
+
+                if (
+                    history.y.length >
+                    maxHistoryPoints
+                ) {
+                    history.y.shift();
+                }
+
+                if (
+                    history.z.length >
+                    maxHistoryPoints
+                ) {
+                    history.z.shift();
+                }
             }
         }
 
-        if (msg.alert) triggerAlertUI(msg.alert);
+        if (msg.alert) {
+            triggerAlertUI(
+                msg.alert
+            );
+        }
+
+        return;
     }
 }
 
@@ -527,7 +776,7 @@ function triggerAlertUI(alert) {
     if (banner) {
         banner.className = `alert-banner critical`;
         if (icon) icon.textContent = "🐘🚨";
-        if (title) title.textContent = `INTRUSION ALERT: ${alert.direction}`;
+        if (title) title.textContent = "INTRUSION ALERT";
         if (desc) desc.textContent = alert.details;
         if (score) {
             score.textContent = `${alert.confidence}% (${alert.threat_level})`;
@@ -545,10 +794,13 @@ function triggerAlertUI(alert) {
     }
 
     const tdoaVec = document.getElementById("tdoaVectorText");
-    if (tdoaVec) tdoaVec.textContent = alert.direction;
+    if (tdoaVec) tdoaVec.textContent = "Localized Activity";
 
     const nearestEl = document.getElementById("nearestNodeText");
-    if (nearestEl && alert.nearest_label) nearestEl.textContent = `${alert.nearest_label}`;
+    if (nearestEl && alert.nearest_node) {
+        nearestEl.textContent = alert.nearest_node
+            .replace("NODE_", "G");
+    }
 
     if (alert.tdoa_delays) {
         Object.keys(alert.tdoa_delays).forEach(nid => {
@@ -574,7 +826,7 @@ function updateAlertsTable(alerts) {
     if (!tbody) return;
 
     if (!alerts || alerts.length === 0) {
-        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No intrusion alerts recorded.</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="5" style="text-align: center; color: var(--text-muted);">No intrusion alerts recorded.</td></tr>`;
         return;
     }
 
@@ -585,7 +837,6 @@ function updateAlertsTable(alerts) {
             <tr class="clickable-row" onclick="openSTFTModal('${mainNode}', true)" title="Click to view STFT Spectrogram for this event">
                 <td>${dateStr}</td>
                 <td><strong>${a.trigger_nodes}</strong></td>
-                <td>${a.direction}</td>
                 <td><span class="threat-badge ${a.threat_level}">${a.threat_level}</span></td>
                 <td><strong>${a.confidence}%</strong></td>
                 <td style="font-size:0.8rem; color:var(--text-muted);">${a.details || ''}</td>

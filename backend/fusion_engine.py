@@ -7,10 +7,10 @@ class TriangularTDOAFusionEngine:
     Calculates Time Difference of Arrival (TDOA) in milliseconds between G1, G2, G3.
     
     Layout:
-         G1 (Apex - Deep Forest Trail)
+         G1 (Apex)
          /  \
         /    \
-      G2 ---- G3 (Boundary - Agricultural Border)
+      G2 ---- G3 (Boundary)
     """
     def __init__(self, tdoa_window_seconds: float = 5.0):
         self.tdoa_window = tdoa_window_seconds
@@ -51,7 +51,15 @@ class TriangularTDOAFusionEngine:
                 tdoa_delays[nid] = 999.0 # Not yet triggered
 
         nearest_node = sorted_triggers[0][0]
-        nearest_label = "G1 (Deep Forest)" if nearest_node == "NODE_01" else ("G2 (Left Boundary)" if nearest_node == "NODE_02" else "G3 (Right Boundary)")
+        nearest_label = (
+            "G1"
+            if nearest_node == "NODE_01"
+            else (
+                "G2"
+                if nearest_node == "NODE_02"
+                else "G3"
+            )
+        )
         
         num_triggered = len(self.node_arrival_times)
         max_conf = max(self.node_confidence.values()) if self.node_confidence else 75
@@ -64,15 +72,15 @@ class TriangularTDOAFusionEngine:
         
         if num_triggered == 1:
             if nearest_node == "NODE_01":
-                direction = "⬅ North-West (Approach from Deep Forest)"
+                direction = "Inbound trajectory: G1 → G2"
                 compass_bearing = "NW"
                 threat_level = "WARNING"
             elif nearest_node == "NODE_02":
-                direction = "↙ South-West (Agricultural Border Left)"
+                direction = "Localized activity near G2"
                 compass_bearing = "SW"
                 threat_level = "CRITICAL"
             else:
-                direction = "↘ South-East (Agricultural Border Right)"
+                direction = "Localized activity near G3"
                 compass_bearing = "SE"
                 threat_level = "CRITICAL"
         else:
@@ -80,28 +88,33 @@ class TriangularTDOAFusionEngine:
             first_two = [t[0] for t in sorted_triggers[:2]]
             
             if first_two == ["NODE_01", "NODE_02"]:
-                direction = "↙ Inbound trajectory: Deep Forest → Left Border (NW to SW)"
+                direction = "Inbound trajectory: G1 → G2"
                 compass_bearing = "SW"
                 threat_level = "CRITICAL"
                 max_conf = min(98, max_conf + 12)
             elif first_two == ["NODE_01", "NODE_03"]:
-                direction = "↘ Inbound trajectory: Deep Forest → Right Border (NE to SE)"
+                direction = "Inbound trajectory: G1 → G3"
                 compass_bearing = "SE"
                 threat_level = "CRITICAL"
                 max_conf = min(98, max_conf + 12)
             elif first_two == ["NODE_02", "NODE_03"] or first_two == ["NODE_03", "NODE_02"]:
-                direction = "⬇ Direct Incursion: Agricultural Line Perimeter"
+                direction = "Direct intrusion: G2 / G3"
                 compass_bearing = "S"
                 threat_level = "CRITICAL"
                 max_conf = min(99, max_conf + 15)
             elif sorted_triggers[0][0] in ["NODE_02", "NODE_03"] and sorted_triggers[-1][0] == "NODE_01":
-                direction = "⬆ Outbound Retreat: Moving back into Deep Forest"
+                direction = "Outbound movement: G2 / G3 → G1"
                 compass_bearing = "N"
                 threat_level = "LOW"
 
         trigger_summary = " → ".join([t[0] for t in sorted_triggers])
         tdoa_str = f"TDOA: G1={tdoa_delays['NODE_01']}ms, G2={tdoa_delays['NODE_02']}ms, G3={tdoa_delays['NODE_03']}ms"
-        details = f"Triangular TDOA Direction Mapping. Nearest Node: {nearest_label}. [{tdoa_str}]. Sequence: [{trigger_summary}]."
+        details = (
+            f"TDOA analysis. "
+            f"Nearest Node: {nearest_label}. "
+            f"[{tdoa_str}]. "
+            f"Sequence: [{trigger_summary}]."
+        )
 
         return {
             "trigger_nodes": trigger_summary,

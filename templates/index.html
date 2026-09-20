@@ -17,7 +17,7 @@
                 <div class="brand-icon">🐘</div>
                 <div class="brand-text">
                     <h1>Elephant Intrusion Early Warning System</h1>
-                    <p>Multimodal IoT Network – Triangular TDOA Geophone Direction Mapping</p>
+                    <p>Multimodal IoT Network – Triangular Geophone Monitoring</p>
                 </div>
             </div>
 
@@ -30,10 +30,10 @@
                     📡 <span id="wsStatus">Connecting...</span>
                 </div>
                 <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NW')">
-                    ⚡ NW Entry (G1→G2)
+                    ⚡ Entry (G1→G2)
                 </button>
                 <button class="btn btn-danger" onclick="triggerSimulation('INBOUND_NE')">
-                    ⚡ NE Entry (G1→G3)
+                    ⚡ Entry (G1→G3)
                 </button>
                 <button class="btn btn-secondary" onclick="triggerSimulation('OUTBOUND')">
                     🔄 Outbound Retreat
@@ -92,8 +92,8 @@
             <div class="glass-card" id="card_NODE_01">
                 <div class="node-card-header">
                     <div class="node-title">
-                        <h3>Node G1 (Apex)</h3>
-                        <div class="node-location">🌲 Deep Forest Trail (Apex)</div>
+                        <h3>Node G1</h3>
+                        <div class="node-location">Sensor Position (Apex)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_01">ONLINE</span>
                 </div>
@@ -145,8 +145,8 @@
             <div class="glass-card" id="card_NODE_02">
                 <div class="node-card-header">
                     <div class="node-title">
-                        <h3>Node G2 (Left Boundary)</h3>
-                        <div class="node-location">🌾 Agricultural Border Left</div>
+                        <h3>Node G2</h3>
+                        <div class="node-location">Sensor Position (Left)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_02">ONLINE</span>
                 </div>
@@ -198,8 +198,8 @@
             <div class="glass-card" id="card_NODE_03">
                 <div class="node-card-header">
                     <div class="node-title">
-                        <h3>Node G3 (Right Boundary)</h3>
-                        <div class="node-location">🌾 Agricultural Border Right</div>
+                        <h3>Node G3</h3>
+                        <div class="node-location">Sensor Position (Right)</div>
                     </div>
                     <span class="node-pill online" id="pill_NODE_03">ONLINE</span>
                 </div>
@@ -257,7 +257,7 @@
                 <div class="card-header">
                     <div>
                         <h2>Triaxial Geophone Waveform (mm/s)</h2>
-                        <span style="font-size: 0.78rem; color: var(--text-muted);">Live X (E-W), Y (N-S), Z (Vertical) Ground Motion Stream</span>
+                        <span style="font-size: 0.78rem; color: var(--text-muted);">Live triaxial ADC waveform stream</span>
                     </div>
                     <div class="waveform-controls">
                         <button
@@ -313,15 +313,15 @@
                 </div>
                 <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; height: 250px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); padding: 1rem;">
                     
-                    <!-- Forest Title Top -->
+                    <!-- Sensor Array Title Top -->
                     <div style="position: absolute; top: 10px; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
-                        🌲 Deep Forest Area (NORTH)
+                        Sensor Array
                     </div>
                     
                     <!-- Triangle Node 1 (Apex Top) -->
                     <div class="trail-node" id="trail_NODE_01" onclick="openSTFTModal('NODE_01')" style="position: absolute; top: 35px;">
                         <div class="node-icon-circle" id="circle_NODE_01">G1</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G1 (Apex)</span>
+                        <span style="font-size:0.75rem; font-weight:700;">G1</span>
                     </div>
 
                     <!-- Triangular Layout Dashed Lines -->
@@ -334,27 +334,27 @@
                     <!-- Triangle Node 2 (Bottom Left) -->
                     <div class="trail-node" id="trail_NODE_02" onclick="openSTFTModal('NODE_02')" style="position: absolute; bottom: 35px; left: 15px;">
                         <div class="node-icon-circle" id="circle_NODE_02">G2</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G2 (Left)</span>
+                        <span style="font-size:0.75rem; font-weight:700;">G2</span>
                     </div>
 
                     <!-- Triangle Node 3 (Bottom Right) -->
                     <div class="trail-node" id="trail_NODE_03" onclick="openSTFTModal('NODE_03')" style="position: absolute; bottom: 35px; right: 15px;">
                         <div class="node-icon-circle" id="circle_NODE_03">G3</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G3 (Right)</span>
+                        <span style="font-size:0.75rem; font-weight:700;">G3</span>
                     </div>
 
-                    <!-- Agricultural Land Bottom -->
+                    <!-- Sensor Array Boundary Bottom -->
                     <div style="position: absolute; bottom: 8px; font-size: 0.72rem; color: var(--color-emerald); font-weight: 700;">
                         ======================================<br>
-                        🌾 Forest Boundary / Agricultural Land
+                        Sensor Array Boundary
                     </div>
                 </div>
 
                 <!-- TDOA Estimated Vector Summary Box -->
                 <div style="margin-top: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; border: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem;">
                     <div style="display: flex; justify-content: space-between; margin-bottom: 0.2rem;">
-                        <span style="color: var(--text-muted);">Estimated Direction:</span>
-                        <strong style="color: var(--color-cyan);" id="tdoaVectorText">⬅ North-West Approach</strong>
+                        <span style="color: var(--text-muted);">Estimated Path:</span>
+                        <strong style="color: var(--color-cyan);" id="tdoaVectorText">Localized Activity</strong>
                     </div>
                     <div style="display: flex; justify-content: space-between;">
                         <span style="color: var(--text-muted);">Nearest Node:</span>
@@ -378,7 +378,6 @@
                         <tr>
                             <th>Timestamp</th>
                             <th>Trigger Sequence</th>
-                            <th>Estimated Direction Mapping</th>
                             <th>Threat Level</th>
                             <th>Confidence</th>
                             <th>Details</th>
@@ -386,7 +385,7 @@
                     </thead>
                     <tbody id="alertsTableBody">
                         <tr>
-                            <td colspan="6" style="text-align: center; color: var(--text-muted);">Loading alert records...</td>
+                            <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading alert records...</td>
                         </tr>
                     </tbody>
                 </table>
@@ -432,9 +431,9 @@
             <div style="display: flex; gap: 0.5rem; align-items: center;">
                 <span style="font-size: 0.8rem; color: var(--text-muted);">STFT Axis:</span>
                 <button class="axis-btn active" onclick="fetchAndRenderSTFT()">Composite Vector |V|</button>
-                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#EF4444; color:#EF4444;">X-Axis (E-W)</button>
-                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#10B981; color:#10B981;">Y-Axis (N-S)</button>
-                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#06B6D4; color:#06B6D4;">Z-Axis (Vertical)</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#EF4444; color:#EF4444;">X-Axis</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#10B981; color:#10B981;">Y-Axis</button>
+                <button class="axis-btn" onclick="fetchAndRenderSTFT()" style="border-color:#06B6D4; color:#06B6D4;">Z-Axis</button>
             </div>
 
             <!-- Spectrogram Canvas & Heatmap Colorbar -->
