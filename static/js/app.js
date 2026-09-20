@@ -171,6 +171,17 @@ let simulationAlarmTimer = null;
 let simulationSirenInterval = null;
 
 let simulationAudioCtx = null;
+let simulationOscillator = null;
+let simulationGain = null;
+
+const FULL_DEMO_DURATION_MS = 120000;
+let fullDemoActive = false;
+let fullDemoStartTime = 0;
+let fullDemoPreviousPhase = null;
+let fullDemoSampleTimer = null;
+let fullDemoAnimationFrame = null;
+let fullDemoImpacts = [];
+let fullDemoSampleIndex = 0;
 
 const ALERT_COOLDOWN_MS = 5000;
 
@@ -290,6 +301,12 @@ function initSimulationButtons() {
         .getElementById("simulateBovidBtn")
         ?.addEventListener("click", () => {
             triggerSpeciesSimulation("bovid");
+        });
+
+    document
+        .getElementById("fullDetectionDemoBtn")
+        ?.addEventListener("click", () => {
+            runFullDetectionDemo();
         });
 }
 
@@ -1945,6 +1962,7 @@ function startLiveSimulationWaveform(
 ) {
 
     stopLiveSimulationWaveform();
+    stopFullDetectionDemo();
 
     waveformNode =
         nodeId;
@@ -2235,234 +2253,542 @@ function stopLiveSimulationWaveform() {
         null;
 }
 
-function startSimulationAlarm() {
+function startContinuousSiren() {
 
-    /*
-     * Stop any previous simulation alarm.
-     */
+    stopSimulationAlarm();
 
-    if (simulationAlarmTimer) {
+    try {
 
-        clearTimeout(
-            simulationAlarmTimer
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
+
+        if (!AudioContext) {
+            return;
+        }
+
+        const audioCtx =
+            new AudioContext();
+
+        simulationAudioCtx =
+            audioCtx;
+
+        if (
+            audioCtx.state ===
+            "suspended"
+        ) {
+            audioCtx.resume();
+        }
+
+        const oscillator =
+            audioCtx.createOscillator();
+
+        const gain =
+            audioCtx.createGain();
+
+        oscillator.type =
+            "sawtooth";
+
+        oscillator.frequency.setValueAtTime(
+            900,
+            audioCtx.currentTime
         );
 
-        simulationAlarmTimer =
-            null;
+        oscillator.frequency.linearRampToValueAtTime(
+            500,
+            audioCtx.currentTime + 0.5
+        );
+
+        oscillator.frequency.linearRampToValueAtTime(
+            900,
+            audioCtx.currentTime + 1.0
+        );
+
+        oscillator.frequency.linearRampToValueAtTime(
+            500,
+            audioCtx.currentTime + 1.5
+        );
+
+        oscillator.frequency.linearRampToValueAtTime(
+            900,
+            audioCtx.currentTime + 2.0
+        );
+
+        let direction =
+            -1;
+
+        const sirenInterval =
+            setInterval(() => {
+
+                if (!simulationAudioCtx || audioCtx.state === "closed") {
+                    return;
+                }
+
+                const currentTime =
+                    audioCtx.currentTime;
+
+                const currentFrequency =
+                    direction === -1
+                        ? 500
+                        : 900;
+
+                oscillator.frequency.linearRampToValueAtTime(
+                    currentFrequency,
+                    currentTime + 0.5
+                );
+
+                direction *= -1;
+
+            }, 500);
+
+        simulationSirenInterval =
+            sirenInterval;
+
+        gain.gain.setValueAtTime(
+            0.0,
+            audioCtx.currentTime
+        );
+
+        gain.gain.linearRampToValueAtTime(
+            0.32,
+            audioCtx.currentTime + 0.08
+        );
+
+        oscillator.connect(
+            gain
+        );
+
+        gain.connect(
+            audioCtx.destination
+        );
+
+        oscillator.start();
+
+        simulationOscillator =
+            oscillator;
+
+        simulationGain =
+            gain;
+
+    } catch (e) {
+        console.error("Continuous siren audio error:", e);
+    }
+}
+
+function stopSimulationAlarm() {
+
+    if (simulationAlarmTimer) {
+        clearTimeout(simulationAlarmTimer);
+        simulationAlarmTimer = null;
     }
 
     if (simulationSirenInterval) {
+        clearInterval(simulationSirenInterval);
+        simulationSirenInterval = null;
+    }
 
-        clearInterval(
-            simulationSirenInterval
-        );
+    if (simulationGain && simulationAudioCtx) {
+        try {
+            simulationGain.gain.linearRampToValueAtTime(
+                0.001,
+                simulationAudioCtx.currentTime + 0.1
+            );
+        } catch (e) {}
+    }
 
-        simulationSirenInterval =
-            null;
+    if (simulationOscillator && simulationAudioCtx) {
+        try {
+            simulationOscillator.stop(
+                simulationAudioCtx.currentTime + 0.15
+            );
+        } catch (e) {}
+        simulationOscillator = null;
     }
 
     if (simulationAudioCtx) {
-
-        try {
-            simulationAudioCtx.close();
-        } catch (e) {}
-
-        simulationAudioCtx =
-            null;
+        const ctxToClose = simulationAudioCtx;
+        simulationAudioCtx = null;
+        setTimeout(() => {
+            try {
+                ctxToClose.close();
+            } catch (e) {}
+        }, 200);
     }
 
+    simulationGain = null;
+}
+
+function startSimulationAlarm(durationMs = SIMULATION_ALARM_DURATION_MS) {
+
+    startContinuousSiren();
+
+    if (durationMs && durationMs > 0) {
+        simulationAlarmTimer = setTimeout(() => {
+            stopSimulationAlarm();
+        }, durationMs);
+    }
+}
+
+function setSimulationButtonsDisabled(disabled) {
+    const elBtn = document.getElementById("simulateElephantBtn");
+    const huBtn = document.getElementById("simulateHumanBtn");
+    const boBtn = document.getElementById("simulateBovidBtn");
+    if (elBtn) elBtn.disabled = disabled;
+    if (huBtn) huBtn.disabled = disabled;
+    if (boBtn) boBtn.disabled = disabled;
+}
+
+function createFullDemoImpacts() {
+    const impacts = [];
+
+    function getShuffledWeights() {
+        const weights = [
+            0.45 + Math.random() * 0.20,
+            0.65 + Math.random() * 0.20,
+            0.92 + Math.random() * 0.08
+        ];
+        for (let j = weights.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [weights[j], weights[k]] = [weights[k], weights[j]];
+        }
+        return weights;
+    }
 
     /*
-     * Web Audio API.
+     * 1. ELEPHANT APPROACH (20.0s -> 27.0s)
+     * Vibration energy gradually ramps up, peaks stay strictly below 2500 ADC.
      */
+    const approachTimes = [20.8, 22.2, 23.6, 24.8, 25.8, 26.6];
+    approachTimes.forEach((t, idx) => {
+        const progress = idx / (approachTimes.length - 1);
+        const amp = 700 + progress * 1000 + Math.random() * 200;
+        const w = getShuffledWeights();
+        impacts.push({
+            center: t,
+            amplitude: amp,
+            width: 0.07 + Math.random() * 0.03,
+            wx: w[0],
+            wy: w[1],
+            wz: w[2],
+            freq_x: 20 + Math.random() * 6,
+            freq_y: 20 + Math.random() * 6,
+            freq_z: 20 + Math.random() * 6
+        });
+    });
 
-    const AudioContext =
-        window.AudioContext ||
-        window.webkitAudioContext;
+    /*
+     * 2. MAIN ELEPHANT EVENT (27.0s -> 58.0s)
+     * Heavy transient impacts crossing 2500 ADC, peaks 2700 - 4200 ADC.
+     */
+    let tCur = 27.4;
+    const elephantVariations = [0.95, 1.08, 0.88, 1.14, 0.92, 1.0, 1.16, 0.90];
+    let eIdx = 0;
+    while (tCur < 57.6) {
+        const varFactor = elephantVariations[eIdx % elephantVariations.length];
+        eIdx++;
+        const baseAmp = 2700 + Math.random() * 1000;
+        const amp = baseAmp * varFactor;
+        const w = getShuffledWeights();
+        impacts.push({
+            center: tCur,
+            amplitude: amp,
+            width: 0.08 + Math.random() * 0.04,
+            wx: w[0],
+            wy: w[1],
+            wz: w[2],
+            freq_x: 20 + Math.random() * 8,
+            freq_y: 20 + Math.random() * 8,
+            freq_z: 20 + Math.random() * 8
+        });
+        tCur += 1.1 + Math.random() * 0.65;
+    }
 
+    /*
+     * 3. HUMAN EVENT (66.0s -> 74.0s)
+     * Human footsteps below 1700 ADC (approx 700 - 1650 ADC total).
+     */
+    tCur = 66.5;
+    const humanVariations = [0.85, 1.0, 0.9, 1.1, 0.95, 1.05];
+    let hIdx = 0;
+    while (tCur < 73.6) {
+        const varFactor = humanVariations[hIdx % humanVariations.length];
+        hIdx++;
+        const amp = (650 + Math.random() * 550) * varFactor;
+        const w = getShuffledWeights();
+        impacts.push({
+            center: tCur,
+            amplitude: amp,
+            width: 0.04 + Math.random() * 0.035,
+            wx: w[0],
+            wy: w[1],
+            wz: w[2],
+            freq_x: 30 + Math.random() * 12,
+            freq_y: 30 + Math.random() * 12,
+            freq_z: 30 + Math.random() * 12
+        });
+        tCur += 0.55 + Math.random() * 0.35;
+    }
 
-    if (!AudioContext) {
+    /*
+     * 4. BOVID EVENT (81.0s -> 97.0s)
+     * Intermediate disturbance, peaks 1700 - 2400 ADC.
+     */
+    tCur = 81.5;
+    const bovidVariations = [0.92, 1.06, 0.88, 1.1, 0.95, 1.02];
+    let bIdx = 0;
+    while (tCur < 96.6) {
+        const varFactor = bovidVariations[bIdx % bovidVariations.length];
+        bIdx++;
+        const amp = (1400 + Math.random() * 550) * varFactor;
+        const w = getShuffledWeights();
+        impacts.push({
+            center: tCur,
+            amplitude: amp,
+            width: 0.05 + Math.random() * 0.04,
+            wx: w[0],
+            wy: w[1],
+            wz: w[2],
+            freq_x: 24 + Math.random() * 12,
+            freq_y: 24 + Math.random() * 12,
+            freq_z: 24 + Math.random() * 12
+        });
+        tCur += 0.50 + Math.random() * 0.38;
+    }
+
+    return impacts;
+}
+
+function runFullDetectionDemo() {
+
+    stopLiveSimulationWaveform();
+    stopFullDetectionDemo();
+
+    const nodeId = "NODE_02";
+    waveformNode = nodeId;
+    if (typeof selectWaveformNode === "function") {
+        selectWaveformNode(nodeId);
+    }
+
+    const history = triaxialHistory[nodeId];
+    if (!history) return;
+
+    history.x.length = 0;
+    history.y.length = 0;
+    history.z.length = 0;
+    if (history.timestamps) {
+        history.timestamps.length = 0;
+    }
+
+    /*
+     * Pre-fill 10-second rolling display window with dynamic background.
+     */
+    const prefillSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+    for (let i = 0; i < prefillSamples; i++) {
+        const tPre = (i - prefillSamples) / WAVEFORM_RATE_HZ;
+        history.x.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "x")))));
+        history.y.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "y")))));
+        history.z.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "z")))));
+        if (history.timestamps) {
+            history.timestamps.push(null);
+        }
+    }
+
+    /*
+     * Disable individual buttons and update Full Demo button.
+     */
+    setSimulationButtonsDisabled(true);
+    const demoBtn = document.getElementById("fullDetectionDemoBtn");
+    if (demoBtn) {
+        demoBtn.classList.add("active");
+        demoBtn.textContent = "🎬 Demo Running (120s)...";
+    }
+
+    fullDemoActive = true;
+    simulationActive = true;
+    simulationNodeId = nodeId;
+    fullDemoStartTime = performance.now();
+    fullDemoPreviousPhase = null;
+    fullDemoSampleIndex = 0;
+    fullDemoImpacts = createFullDemoImpacts();
+
+    fullDemoSampleTimer = setInterval(generateFullDemoSample, SIMULATION_SAMPLE_INTERVAL_MS);
+    fullDemoAnimationFrame = requestAnimationFrame(animateFullDemoWaveform);
+}
+
+function animateFullDemoWaveform() {
+
+    if (!fullDemoActive) {
         return;
     }
 
+    renderWaveform();
 
-    const audioCtx =
-        new AudioContext();
+    fullDemoAnimationFrame = requestAnimationFrame(animateFullDemoWaveform);
+}
 
-    simulationAudioCtx =
-        audioCtx;
+function handleFullDemoPhaseTransition(previousPhase, currentPhase) {
 
+    if (currentPhase === "elephant") {
+        showSpeciesDetectionAlert("elephant");
+        startContinuousSiren();
+    } else if (currentPhase === "human") {
+        stopSimulationAlarm();
+        showSpeciesDetectionAlert("human");
+    } else if (currentPhase === "bovid") {
+        stopSimulationAlarm();
+        showSpeciesDetectionAlert("bovid");
+    } else {
+        // Normal periods: "normal", "elephant_approach", "normal_after_elephant", "normal_after_human", "normal_after_bovid"
+        stopSimulationAlarm();
+        hideElephantDetectedAlert();
+    }
+}
 
-    if (
-        audioCtx.state ===
-        "suspended"
-    ) {
+function generateFullDemoSample() {
 
-        audioCtx.resume();
+    if (!fullDemoActive || !simulationNodeId) {
+        return;
     }
 
+    const history = triaxialHistory[simulationNodeId];
+    if (!history) {
+        return;
+    }
 
-    const oscillator =
-        audioCtx.createOscillator();
+    const elapsedMs = performance.now() - fullDemoStartTime;
+    const elapsedSeconds = elapsedMs / 1000;
 
-
-    const gain =
-        audioCtx.createGain();
-
-
-    oscillator.type =
-        "sawtooth";
-
-
-    /*
-     * Start at high siren frequency.
-     */
-
-    oscillator.frequency.setValueAtTime(
-        900,
-        audioCtx.currentTime
-    );
-
+    if (elapsedSeconds >= 120.0) {
+        stopFullDetectionDemo();
+        return;
+    }
 
     /*
-     * Siren sweep.
+     * 120-SECOND TIMELINE PHASE DETERMINATION
      */
-
-    oscillator.frequency.setValueAtTime(
-        900,
-        audioCtx.currentTime
-    );
-
-
-    oscillator.frequency.linearRampToValueAtTime(
-        500,
-        audioCtx.currentTime + 0.5
-    );
-
-
-    oscillator.frequency.linearRampToValueAtTime(
-        900,
-        audioCtx.currentTime + 1.0
-    );
-
-
-    oscillator.frequency.linearRampToValueAtTime(
-        500,
-        audioCtx.currentTime + 1.5
-    );
-
-
-    oscillator.frequency.linearRampToValueAtTime(
-        900,
-        audioCtx.currentTime + 2.0
-    );
-
+    let currentPhase;
+    if (elapsedSeconds < 20.0) {
+        currentPhase = "normal";
+    } else if (elapsedSeconds < 27.0) {
+        currentPhase = "elephant_approach";
+    } else if (elapsedSeconds < 58.0) {
+        currentPhase = "elephant";
+    } else if (elapsedSeconds < 66.0) {
+        currentPhase = "normal_after_elephant";
+    } else if (elapsedSeconds < 74.0) {
+        currentPhase = "human";
+    } else if (elapsedSeconds < 81.0) {
+        currentPhase = "normal_after_human";
+    } else if (elapsedSeconds < 97.0) {
+        currentPhase = "bovid";
+    } else {
+        currentPhase = "normal_after_bovid";
+    }
 
     /*
-     * Continue the siren pattern for
-     * the full 10 seconds.
+     * Trigger alert and siren updates ONLY on phase transition
      */
+    if (currentPhase !== fullDemoPreviousPhase) {
+        handleFullDemoPhaseTransition(fullDemoPreviousPhase, currentPhase);
+        fullDemoPreviousPhase = currentPhase;
+    }
 
-    let direction =
-        -1;
+    const t = fullDemoSampleIndex / WAVEFORM_RATE_HZ;
+    fullDemoSampleIndex++;
 
+    const bgX = generateDynamicBackground(t, "x");
+    const bgY = generateDynamicBackground(t, "y");
+    const bgZ = generateDynamicBackground(t, "z");
 
-    const sirenInterval =
-        setInterval(() => {
+    let eventX = 0;
+    let eventY = 0;
+    let eventZ = 0;
 
-            const currentTime =
-                audioCtx.currentTime;
+    for (const impact of fullDemoImpacts) {
+        const distance = t - impact.center;
+        if (Math.abs(distance) > impact.width * 4.0) {
+            continue;
+        }
 
-            const currentFrequency =
-                direction === -1
-                    ? 500
-                    : 900;
+        const envelope = Math.exp(-Math.abs(distance) / impact.width);
+        const ringX = Math.sin(2 * Math.PI * impact.freq_x * distance);
+        const ringY = Math.sin(2 * Math.PI * impact.freq_y * distance);
+        const ringZ = Math.sin(2 * Math.PI * impact.freq_z * distance);
 
-            oscillator.frequency.linearRampToValueAtTime(
-                currentFrequency,
-                currentTime + 0.5
-            );
+        eventX += impact.amplitude * impact.wx * envelope * (0.55 + 0.45 * ringX);
+        eventY += impact.amplitude * impact.wy * envelope * (0.55 + 0.45 * ringY);
+        eventZ += impact.amplitude * impact.wz * envelope * (0.55 + 0.45 * ringZ);
+    }
 
-            direction *= -1;
+    const xADC = Math.round(Math.max(0, Math.min(5000, bgX + eventX)));
+    const yADC = Math.round(Math.max(0, Math.min(5000, bgY + eventY)));
+    const zADC = Math.round(Math.max(0, Math.min(5000, bgZ + eventZ)));
 
-        }, 500);
+    history.x.push(xADC);
+    history.y.push(yADC);
+    history.z.push(zADC);
 
-    simulationSirenInterval =
-        sirenInterval;
+    const maxSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+    while (history.x.length > maxSamples) {
+        history.x.shift();
+    }
+    while (history.y.length > maxSamples) {
+        history.y.shift();
+    }
+    while (history.z.length > maxSamples) {
+        history.z.shift();
+    }
+    if (history.timestamps) {
+        history.timestamps.push(Date.now() / 1000);
+        while (history.timestamps.length > maxSamples) {
+            history.timestamps.shift();
+        }
+    }
+}
 
+function stopFullDetectionDemo() {
 
-    /*
-     * Volume.
-     */
+    if (!fullDemoActive) {
+        setSimulationButtonsDisabled(false);
+        const demoBtn = document.getElementById("fullDetectionDemoBtn");
+        if (demoBtn) {
+            demoBtn.classList.remove("active");
+            demoBtn.textContent = "🎬 Full Detection Demo";
+        }
+        return;
+    }
 
-    gain.gain.setValueAtTime(
-        0.0,
-        audioCtx.currentTime
-    );
+    ambientSampleTime = fullDemoSampleIndex / WAVEFORM_RATE_HZ;
+    fullDemoActive = false;
+    simulationActive = false;
+    simulationNodeId = null;
 
+    if (fullDemoSampleTimer) {
+        clearInterval(fullDemoSampleTimer);
+        fullDemoSampleTimer = null;
+    }
 
-    gain.gain.linearRampToValueAtTime(
-        0.32,
-        audioCtx.currentTime + 0.08
-    );
+    if (fullDemoAnimationFrame) {
+        cancelAnimationFrame(fullDemoAnimationFrame);
+        fullDemoAnimationFrame = null;
+    }
 
+    stopSimulationAlarm();
+    hideElephantDetectedAlert();
 
-    oscillator.connect(
-        gain
-    );
+    setSimulationButtonsDisabled(false);
+    const demoBtn = document.getElementById("fullDetectionDemoBtn");
+    if (demoBtn) {
+        demoBtn.classList.remove("active");
+        demoBtn.textContent = "🎬 Full Detection Demo";
+    }
 
-
-    gain.connect(
-        audioCtx.destination
-    );
-
-
-    oscillator.start();
-
-
-    /*
-     * STOP EVERYTHING AFTER 10 SECONDS.
-     */
-
-    simulationAlarmTimer =
-        setTimeout(() => {
-
-            clearInterval(
-                sirenInterval
-            );
-
-            simulationSirenInterval =
-                null;
-
-
-            gain.gain.linearRampToValueAtTime(
-                0.001,
-                audioCtx.currentTime + 0.15
-            );
-
-
-            oscillator.stop(
-                audioCtx.currentTime + 0.2
-            );
-
-
-            setTimeout(() => {
-
-                audioCtx.close();
-                if (simulationAudioCtx === audioCtx) {
-                    simulationAudioCtx = null;
-                }
-
-            }, 300);
-
-
-            simulationAlarmTimer =
-                null;
-
-        }, SIMULATION_ALARM_DURATION_MS);
+    renderWaveform();
 }
 
 function triggerSpeciesSimulation(type) {
+
+    stopFullDetectionDemo();
 
     /*
      * Use the selected simulation node internally.
@@ -2624,24 +2950,11 @@ async function clearSimulation() {
 
         hideElephantDetectedAlert();
 
+        stopFullDetectionDemo();
+
         stopLiveSimulationWaveform();
 
-        if (simulationAlarmTimer) {
-            clearTimeout(simulationAlarmTimer);
-            simulationAlarmTimer = null;
-        }
-
-        if (simulationSirenInterval) {
-            clearInterval(simulationSirenInterval);
-            simulationSirenInterval = null;
-        }
-
-        if (simulationAudioCtx) {
-            try {
-                simulationAudioCtx.close();
-            } catch (e) {}
-            simulationAudioCtx = null;
-        }
+        stopSimulationAlarm();
 
         createInitialHistory();
         renderWaveform();

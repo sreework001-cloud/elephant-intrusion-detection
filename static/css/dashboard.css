@@ -1774,6 +1774,37 @@ tr.clickable-row:hover {
     box-shadow: 0 0 15px rgba(245,158,11,0.3);
 }
 
+.full-demo-btn {
+    border: 1px solid rgba(168, 85, 247, 0.65);
+    background: rgba(168, 85, 247, 0.18);
+    color: #C084FC;
+}
+
+.full-demo-btn:hover {
+    background: rgba(168, 85, 247, 0.28);
+    box-shadow: 0 0 15px rgba(168, 85, 247, 0.35);
+}
+
+.full-demo-btn.active {
+    background: rgba(168, 85, 247, 0.35);
+    border-color: rgba(192, 132, 252, 0.9);
+    box-shadow: 0 0 18px rgba(168, 85, 247, 0.5);
+    animation: pulseDemoBtn 2s infinite;
+}
+
+@keyframes pulseDemoBtn {
+    0%, 100% { box-shadow: 0 0 12px rgba(168, 85, 247, 0.35); }
+    50% { box-shadow: 0 0 22px rgba(168, 85, 247, 0.7); }
+}
+
+.full-demo-btn:disabled,
+.simulation-btn:disabled {
+    opacity: 0.40;
+    cursor: not-allowed;
+    transform: none !important;
+    box-shadow: none !important;
+}
+
 .visually-hidden-node-label {
     display: none !important;
 }
