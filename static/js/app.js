@@ -15,24 +15,6 @@ const SIMULATION_DURATION_MS = 20000;
 const SIMULATION_SAMPLE_INTERVAL_MS =
     1000 / WAVEFORM_RATE_HZ;
 
-let simulationActive = false;
-
-let simulationNodeId = null;
-
-let simulationStartTime = 0;
-
-let simulationSampleTimer = null;
-
-let simulationAnimationFrame = null;
-
-let simulationSampleIndex = 0;
-
-let simulationType = "elephant";
-
-let simulationPeakADC = 0;
-
-let simulationImpacts = [];
-
 /*
  * ===============================================================
  * ADC TO VOLTAGE CONVERSION & CALIBRATION
@@ -230,10 +212,14 @@ const SIMULATION_ALARM_DURATION_MS = 10000;
 let waveformDisplayMode = "idle"; // "idle" | "live" | "demo"
 let simulationActive = false;
 let fullDemoActive = false;
+let simulationNodeId = null;
 let simulationType = null;
-let simulationStartTime = null;
+let simulationStartTime = 0;
 let simulationSampleTimer = null;
 let waveformAnimationFrame = null;
+let simulationSampleIndex = 0;
+let simulationPeakADC = 0;
+let simulationImpacts = [];
 
 let simulationAlarmTimer = null;
 let simulationSirenInterval = null;
@@ -276,13 +262,19 @@ let triaxialHistory = {
     "NODE_03": { x: [], y: [], z: [], vx: [], vy: [], vz: [], timestamps: [] }
 };
 
-document.addEventListener("DOMContentLoaded", () => {
+function initApp() {
     initCanvas();
     initWaveformNodeSelector();
     initWebSocket();
     initSimulationButtons();
     renderWaveform();
-});
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initApp);
+} else {
+    initApp();
+}
 
 function initSimulationButtons() {
     document
@@ -307,6 +299,12 @@ function initSimulationButtons() {
         .getElementById("fullDetectionDemoBtn")
         ?.addEventListener("click", () => {
             runFullDetectionDemo();
+        });
+
+    document
+        .getElementById("clearSimulationBtn")
+        ?.addEventListener("click", () => {
+            clearSimulation();
         });
 }
 
@@ -447,13 +445,24 @@ function getVisibleData(data) {
 
 function renderWaveform() {
     if (!canvas || !ctx || !voltageCanvas || !voltageCtx) {
-        return;
+        if (!canvas) {
+            canvas = document.getElementById("vibrationCanvas");
+            if (canvas) ctx = canvas.getContext("2d");
+        }
+        if (!voltageCanvas) {
+            voltageCanvas = document.getElementById("voltageCanvas");
+            if (voltageCanvas) voltageCtx = voltageCanvas.getContext("2d");
+        }
+        if (!canvas || !ctx || !voltageCanvas || !voltageCtx) {
+            return;
+        }
     }
 
     resizeWaveformCanvas();
 
     const rect = canvas.getBoundingClientRect();
     if (rect.width <= 0 || rect.height <= 0) {
+        requestAnimationFrame(renderWaveform);
         return;
     }
 
@@ -2917,3 +2926,14 @@ function playAlertSound() {
         );
     }
 }
+
+// Explicit window exports
+window.runFullDetectionDemo = runFullDetectionDemo;
+window.stopFullDetectionDemo = stopFullDetectionDemo;
+window.triggerSpeciesSimulation = triggerSpeciesSimulation;
+window.triggerSimulation = triggerSimulation;
+window.clearSimulation = clearSimulation;
+window.toggleAxisButton = toggleAxisButton;
+window.selectWaveformNode = selectWaveformNode;
+window.initApp = initApp;
+
