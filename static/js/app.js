@@ -6,6 +6,14 @@ let canvas, ctx;
 let stftCanvas, stftCtx;
 
 const WAVEFORM_RATE_HZ = 200;
+
+const ADC_ALERT_THRESHOLD = 2000;
+
+const ALERT_COOLDOWN_MS = 5000;
+
+let lastElephantAlertTime = 0;
+
+let elephantAlertActive = false;
 const WAVEFORM_HISTORY_SECONDS = 20;
 const maxHistoryPoints = WAVEFORM_RATE_HZ * WAVEFORM_HISTORY_SECONDS;
 const WAVEFORM_DISPLAY_SECONDS = 10;
@@ -868,6 +876,125 @@ function handleServerMessage(msg) {
 
         const d = msg.data || {};
 
+        /*
+         * =========================================================
+         * ADC THRESHOLD DETECTION
+         * =========================================================
+         *
+         * If any waveform sample crosses 2000 ADC,
+         * immediately trigger the elephant alert.
+         */
+
+        let waveformMax =
+            0;
+
+        let triggeringSensor =
+            d.node_id || "NODE_01";
+
+
+        if (
+            Array.isArray(d.wave_x)
+        ) {
+
+            waveformMax =
+                Math.max(
+                    waveformMax,
+                    ...d.wave_x
+                        .map(Number)
+                        .filter(
+                            Number.isFinite
+                        )
+                );
+        }
+
+
+        if (
+            Array.isArray(d.wave_y)
+        ) {
+
+            waveformMax =
+                Math.max(
+                    waveformMax,
+                    ...d.wave_y
+                        .map(Number)
+                        .filter(
+                            Number.isFinite
+                        )
+                );
+        }
+
+
+        if (
+            Array.isArray(d.wave_z)
+        ) {
+
+            waveformMax =
+                Math.max(
+                    waveformMax,
+                    ...d.wave_z
+                        .map(Number)
+                        .filter(
+                            Number.isFinite
+                        )
+                );
+        }
+
+
+        /*
+         * Also check the current scalar
+         * vibration values if waveform blocks
+         * are not available.
+         */
+
+        waveformMax =
+            Math.max(
+                waveformMax,
+                Math.abs(
+                    safeNum(
+                        d.vib_x,
+                        0
+                    )
+                ),
+                Math.abs(
+                    safeNum(
+                        d.vib_y,
+                        0
+                    )
+                ),
+                Math.abs(
+                    safeNum(
+                        d.vib_z,
+                        0
+                    )
+                )
+            );
+
+
+        /*
+         * TRIGGER AT 2000 ADC
+         */
+
+        if (
+            waveformMax >=
+            ADC_ALERT_THRESHOLD
+        ) {
+
+            showElephantDetectedAlert({
+
+                sensor:
+                    triggeringSensor,
+
+                maxAmplitude:
+                    waveformMax,
+
+                trigger:
+                    "Threshold Exceeded",
+
+                description:
+                    "Ground vibration exceeded 2000 ADC."
+            });
+        }
+
         updateNodeUI(d);
 
         const nodeId = d.node_id;
@@ -1143,60 +1270,308 @@ function updateNodeUI(node) {
     }
 }
 
-function triggerAlertUI(alert) {
-    const banner = document.getElementById("alertBanner");
-    const icon = document.getElementById("alertIcon");
-    const title = document.getElementById("alertTitle");
-    const desc = document.getElementById("alertDesc");
-    const score = document.getElementById("threatScore");
-    const stftBtn = document.getElementById("bannerStftBtn");
-    const sirenText = document.getElementById("sirenStatusText");
+function showElephantDetectedAlert({
+    sensor = "G1",
+    maxAmplitude = 0,
+    trigger = "ADC Threshold Exceeded",
+    description = "Ground vibration exceeded the detection threshold."
+} = {}) {
 
-    if (banner) {
-        banner.className = `alert-banner critical`;
-        if (icon) icon.textContent = "🐘🚨";
-        if (title) title.textContent = "INTRUSION ALERT";
-        if (desc) desc.textContent = alert.details;
-        if (score) {
-            score.textContent = `${alert.confidence}% (${alert.threat_level})`;
-            score.style.color = "var(--color-crimson)";
-        }
-        if (stftBtn) {
-            stftBtn.style.display = "inline-flex";
-            stftBtn.onclick = () => openSTFTModal(alert.latest_node || "NODE_01", true);
-        }
+    const now =
+        Date.now();
+
+
+    /*
+     * Prevent the same waveform spike from
+     * continuously retriggering the alarm.
+     */
+
+    if (
+        now -
+        lastElephantAlertTime <
+        ALERT_COOLDOWN_MS
+    ) {
+        return;
     }
 
-    if (sirenText && alert.threat_level === "CRITICAL") {
-        sirenText.textContent = "ACTIVATED (SIREN + LIGHT)";
-        sirenText.style.color = "var(--color-crimson)";
+
+    lastElephantAlertTime =
+        now;
+
+    elephantAlertActive =
+        true;
+
+
+    const alert =
+        document.getElementById(
+            "elephantDetectionAlert"
+        );
+
+
+    const title =
+        document.getElementById(
+            "elephantAlertTitle"
+        );
+
+
+    const desc =
+        document.getElementById(
+            "elephantAlertDescription"
+        );
+
+
+    const timeEl =
+        document.getElementById(
+            "elephantAlertTime"
+        );
+
+
+    const amplitudeEl =
+        document.getElementById(
+            "elephantAlertAmplitude"
+        );
+
+
+    const triggerEl =
+        document.getElementById(
+            "elephantAlertTrigger"
+        );
+
+
+    const sensorEl =
+        document.getElementById(
+            "elephantAlertSensor"
+        );
+
+
+    if (!alert) {
+        return;
     }
 
-    const tdoaVec = document.getElementById("tdoaVectorText");
-    if (tdoaVec) tdoaVec.textContent = "Localized Activity";
 
-    const nearestEl = document.getElementById("nearestNodeText");
-    if (nearestEl && alert.nearest_node) {
-        nearestEl.textContent = alert.nearest_node
-            .replace("NODE_", "G");
+    /*
+     * SHOW ALERT
+     */
+
+    alert.classList.remove(
+        "hidden"
+    );
+
+
+    if (title) {
+
+        title.textContent =
+            "ELEPHANT DETECTED!";
     }
 
-    if (alert.tdoa_delays) {
-        Object.keys(alert.tdoa_delays).forEach(nid => {
-            const tEl = document.getElementById(`tdoa_${nid}`);
-            if (tEl) {
-                const val = alert.tdoa_delays[nid];
-                tEl.innerHTML = `${val < 900 ? val.toFixed(1) : '--'} <span style="font-size:0.75rem;">ms</span>`;
-            }
-        });
+
+    if (desc) {
+
+        desc.textContent =
+            description;
     }
 
-    if (alert.latest_node) {
-        const trailNode = document.getElementById(`trail_${alert.latest_node}`);
-        if (trailNode) trailNode.classList.add("active");
+
+    if (timeEl) {
+
+        timeEl.textContent =
+            new Date()
+                .toLocaleTimeString();
     }
+
+
+    if (amplitudeEl) {
+
+        amplitudeEl.textContent =
+            `${Math.round(
+                maxAmplitude
+            )} ADC`;
+    }
+
+
+    if (triggerEl) {
+
+        triggerEl.textContent =
+            trigger;
+    }
+
+
+    if (sensorEl) {
+
+        sensorEl.textContent =
+            sensor
+                .replace(
+                    "NODE_",
+                    "G"
+                );
+    }
+
+
+    /*
+     * PLAY ALARM
+     */
 
     playAlertSound();
+}
+
+function hideElephantDetectedAlert() {
+
+    const alert =
+        document.getElementById(
+            "elephantDetectionAlert"
+        );
+
+    if (alert) {
+
+        alert.classList.add(
+            "hidden"
+        );
+    }
+
+    elephantAlertActive =
+        false;
+}
+
+function testAlarmSound() {
+
+    playAlertSound();
+
+}
+
+function triggerAlertUI(alert) {
+
+    /*
+     * MAIN ELEPHANT ALERT
+     */
+
+    showElephantDetectedAlert({
+
+        sensor:
+            alert.latest_node ||
+            alert.nearest_node ||
+            "NODE_01",
+
+        maxAmplitude:
+            ADC_ALERT_THRESHOLD,
+
+        trigger:
+            "TDOA / Fusion Detection",
+
+        description:
+            alert.details ||
+            "Elephant intrusion detected by the geophone sensor array."
+    });
+
+
+    /*
+     * TDOA VECTOR
+     */
+
+    const tdoaVec =
+        document.getElementById(
+            "tdoaVectorText"
+        );
+
+    if (tdoaVec) {
+
+        tdoaVec.textContent =
+            "Localized Activity";
+    }
+
+
+    /*
+     * NEAREST SENSOR
+     */
+
+    const nearestEl =
+        document.getElementById(
+            "nearestNodeText"
+        );
+
+    if (
+        nearestEl &&
+        alert.nearest_node
+    ) {
+
+        nearestEl.textContent =
+            alert.nearest_node
+                .replace(
+                    "NODE_",
+                    "G"
+                );
+    }
+
+
+    /*
+     * TDOA DELAYS
+     */
+
+    if (
+        alert.tdoa_delays
+    ) {
+
+        Object.keys(
+            alert.tdoa_delays
+        ).forEach(
+            nid => {
+
+                const tEl =
+                    document.getElementById(
+                        `tdoa_${nid}`
+                    );
+
+                if (tEl) {
+
+                    const val =
+                        alert.tdoa_delays[
+                            nid
+                        ];
+
+                    tEl.innerHTML =
+                        `${
+                            val < 900
+                                ? val.toFixed(1)
+                                : "--"
+                        }
+                        <span
+                            style="
+                                font-size:0.75rem;
+                            "
+                        >
+                            ms
+                        </span>`;
+                }
+            }
+        );
+    }
+
+
+    /*
+     * HIGHLIGHT TRIGGERING NODE
+     */
+
+    if (
+        alert.latest_node
+    ) {
+
+        const trailNode =
+            document.getElementById(
+                `trail_${alert.latest_node}`
+            );
+
+        if (trailNode) {
+
+            trailNode.classList.add(
+                "active"
+            );
+        }
+    }
+
+
+    /*
+     * Refresh fusion log
+     */
+
     fetchAlerts();
 }
 
@@ -1337,73 +1712,243 @@ function intensityToSpectrogramColor(val) {
     return `#FFFFFF`;
 }
 
-async function triggerSimulation(type = "INBOUND_NW") {
+async function triggerSimulation(
+    type = "INBOUND_NW"
+) {
+
+    /*
+     * Immediately show local elephant
+     * detection when the simulation button
+     * is pressed.
+     */
+
+    showElephantDetectedAlert({
+
+        sensor:
+            type === "INBOUND_NE"
+                ? "G3"
+                : "G2",
+
+        maxAmplitude:
+            ADC_ALERT_THRESHOLD,
+
+        trigger:
+            "Simulation Trigger",
+
+        description:
+            "Simulated elephant intrusion event detected."
+    });
+
+
     try {
-        await fetch("/api/simulate/intrusion", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ type })
-        });
+
+        await fetch(
+            "/api/simulate/intrusion",
+            {
+                method: "POST",
+
+                headers: {
+                    "Content-Type":
+                        "application/json"
+                },
+
+                body:
+                    JSON.stringify({
+                        type
+                    })
+            }
+        );
+
     } catch (e) {
-        console.error("Error triggering simulation:", e);
+
+        console.error(
+            "Error triggering simulation:",
+            e
+        );
     }
 }
 
 async function clearSimulation() {
+
     try {
-        await fetch("/api/simulate/clear", { method: "POST" });
 
-        const banner = document.getElementById("alertBanner");
-        const icon = document.getElementById("alertIcon");
-        const title = document.getElementById("alertTitle");
-        const desc = document.getElementById("alertDesc");
-        const score = document.getElementById("threatScore");
-        const stftBtn = document.getElementById("bannerStftBtn");
-        const sirenText = document.getElementById("sirenStatusText");
-
-        if (banner) {
-            banner.className = "alert-banner normal";
-            if (icon) icon.textContent = "🛡️";
-            if (title) title.textContent = "ALL FIELD NODES SECURE";
-            if (desc) desc.textContent = "Continuous low-power TDOA monitoring active across 3 geophone sensing nodes.";
-            if (score) {
-                score.textContent = "SAFE";
-                score.style.color = "var(--color-emerald)";
+        await fetch(
+            "/api/simulate/clear",
+            {
+                method: "POST"
             }
-            if (stftBtn) stftBtn.style.display = "none";
+        );
+
+
+        /*
+         * Hide elephant detection banner.
+         */
+
+        hideElephantDetectedAlert();
+
+
+        /*
+         * Reset TDOA information.
+         */
+
+        const tdoaVec =
+            document.getElementById(
+                "tdoaVectorText"
+            );
+
+        if (tdoaVec) {
+
+            tdoaVec.textContent =
+                "Localized Activity";
         }
 
-        if (sirenText) {
-            sirenText.textContent = "STANDBY";
-            sirenText.style.color = "var(--text-muted)";
+
+        const nearestEl =
+            document.getElementById(
+                "nearestNodeText"
+            );
+
+        if (nearestEl) {
+
+            nearestEl.textContent =
+                "G1";
         }
 
-        ["NODE_01", "NODE_02", "NODE_03"].forEach(id => {
-            const trailNode = document.getElementById(`trail_${id}`);
-            if (trailNode) trailNode.classList.remove("active");
-        });
+
+        /*
+         * Reset active sensor map nodes.
+         */
+
+        [
+            "NODE_01",
+            "NODE_02",
+            "NODE_03"
+        ].forEach(
+            id => {
+
+                const trailNode =
+                    document.getElementById(
+                        `trail_${id}`
+                    );
+
+                if (trailNode) {
+
+                    trailNode.classList.remove(
+                        "active"
+                    );
+                }
+            }
+        );
+
+
     } catch (e) {
-        console.error("Error clearing simulation:", e);
+
+        console.error(
+            "Error clearing simulation:",
+            e
+        );
     }
 }
 
 function playAlertSound() {
+
     try {
-        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-        const osc = audioCtx.createOscillator();
-        const gain = audioCtx.createGain();
 
-        osc.type = "sawtooth";
-        osc.frequency.setValueAtTime(880, audioCtx.currentTime);
-        osc.frequency.exponentialRampToValueAtTime(440, audioCtx.currentTime + 0.3);
+        const AudioContext =
+            window.AudioContext ||
+            window.webkitAudioContext;
 
-        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
-        gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.3);
+
+        if (!AudioContext) {
+            return;
+        }
+
+
+        const audioCtx =
+            new AudioContext();
+
+
+        if (
+            audioCtx.state ===
+            "suspended"
+        ) {
+
+            audioCtx.resume();
+        }
+
+
+        const osc =
+            audioCtx.createOscillator();
+
+
+        const gain =
+            audioCtx.createGain();
+
+
+        osc.type =
+            "sawtooth";
+
+
+        /*
+         * ALARM TONE
+         */
+
+        osc.frequency.setValueAtTime(
+            880,
+            audioCtx.currentTime
+        );
+
+
+        osc.frequency.exponentialRampToValueAtTime(
+            440,
+            audioCtx.currentTime + 0.25
+        );
+
+
+        osc.frequency.setValueAtTime(
+            880,
+            audioCtx.currentTime + 0.35
+        );
+
+
+        osc.frequency.exponentialRampToValueAtTime(
+            440,
+            audioCtx.currentTime + 0.60
+        );
+
+
+        gain.gain.setValueAtTime(
+            0.35,
+            audioCtx.currentTime
+        );
+
+
+        gain.gain.exponentialRampToValueAtTime(
+            0.01,
+            audioCtx.currentTime + 0.7
+        );
+
 
         osc.connect(gain);
-        gain.connect(audioCtx.destination);
+
+        gain.connect(
+            audioCtx.destination
+        );
+
 
         osc.start();
-        osc.stop(audioCtx.currentTime + 0.3);
-    } catch (e) {}
+
+
+        osc.stop(
+            audioCtx.currentTime + 0.7
+        );
+
+
+    } catch (e) {
+
+        console.error(
+            "Alarm sound error:",
+            e
+        );
+    }
 }

@@ -63,27 +63,6 @@
             </div>
         </div>
 
-        <!-- Dynamic Alert Banner -->
-        <div id="alertBanner" class="alert-banner normal">
-            <div class="alert-info">
-                <div class="alert-icon" id="alertIcon">🛡️</div>
-                <div>
-                    <div class="alert-title" id="alertTitle">ALL FIELD NODES SECURE</div>
-                    <div class="alert-desc" id="alertDesc">Continuous low-power TDOA monitoring active across 3 triangular geophone sensing nodes.</div>
-                </div>
-            </div>
-            <div style="text-align: right; display: flex; align-items: center; gap: 1rem;">
-                <div>
-                    <span style="font-size: 0.8rem; color: var(--text-muted);">FUSION THREAT SCORE</span>
-                    <div style="font-family: var(--font-heading); font-weight: 800; font-size: 1.4rem; color: var(--color-emerald);" id="threatScore">
-                        SAFE
-                    </div>
-                </div>
-                <button class="btn btn-stft" onclick="openSTFTModal('NODE_01', true)" style="display:none;" id="bannerStftBtn">
-                    📊 STFT Spectrogram
-                </button>
-            </div>
-        </div>
 
         <!-- Grid 1: 3 Field Sensor Nodes in Triangular Array -->
         <section class="grid-nodes">
@@ -249,147 +228,495 @@
 
         </section>
 
-        <!-- Grid 2: Waveform & Triangular Map Radar -->
-        <section class="grid-charts">
-            
-            <!-- Real-time Waveform Canvas -->
-            <div class="glass-card">
+        <section class="dashboard-main-section">
+
+            <!-- =====================================================
+                 FULL WIDTH LIVE WAVEFORM
+                 ===================================================== -->
+
+            <div class="glass-card waveform-main-card">
+
                 <div class="card-header">
+
                     <div>
-                        <h2>Triaxial Geophone Waveform (mm/s)</h2>
-                        <span style="font-size: 0.78rem; color: var(--text-muted);">Live triaxial ADC waveform stream</span>
+                        <h2>Triaxial Geophone Waveform</h2>
+
+                        <span
+                            style="
+                                font-size: 0.78rem;
+                                color: var(--text-muted);
+                            "
+                        >
+                            Live triaxial ADC waveform stream
+                        </span>
                     </div>
+
+
                     <div class="waveform-controls">
+
                         <button
                             type="button"
                             class="wave-axis-btn axis-x active"
                             id="axisBtn_X"
-                            onclick="toggleAxisButton('X')">
+                            onclick="toggleAxisButton('X')"
+                        >
                             <span class="axis-indicator"></span>
                             X
                         </button>
+
 
                         <button
                             type="button"
                             class="wave-axis-btn axis-y active"
                             id="axisBtn_Y"
-                            onclick="toggleAxisButton('Y')">
+                            onclick="toggleAxisButton('Y')"
+                        >
                             <span class="axis-indicator"></span>
                             Y
                         </button>
+
 
                         <button
                             type="button"
                             class="wave-axis-btn axis-z active"
                             id="axisBtn_Z"
-                            onclick="toggleAxisButton('Z')">
+                            onclick="toggleAxisButton('Z')"
+                        >
                             <span class="axis-indicator"></span>
                             Z
                         </button>
 
+
                         <span class="waveform-divider"></span>
+
+
                         <span class="waveform-live">
+
                             <span class="live-dot"></span>
+
                             LIVE
+
                         </span>
 
-                        
                     </div>
-                </div>
-                <!-- Waveform Canvas -->
-                <div class="waveform-canvas-wrapper">
-                     <canvas id="vibrationCanvas"></canvas>
+
                 </div>
 
-            </div>
-                    
-                    
-                
 
-            <!-- Triangular Compass TDOA Map -->
-            <div class="glass-card">
-                <div class="card-header">
-                    <h2>Triangular TDOA Compass Map</h2>
-                </div>
-                <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; position: relative; height: 250px; background: rgba(0,0,0,0.3); border-radius: 12px; border: 1px solid rgba(255,255,255,0.05); padding: 1rem;">
-                    
-                    <!-- Sensor Array Title Top -->
-                    <div style="position: absolute; top: 10px; font-size: 0.75rem; color: var(--text-muted); font-weight: 700; text-transform: uppercase;">
-                        Sensor Array
-                    </div>
-                    
-                    <!-- Triangle Node 1 (Apex Top) -->
-                    <div class="trail-node" id="trail_NODE_01" onclick="openSTFTModal('NODE_01')" style="position: absolute; top: 35px;">
-                        <div class="node-icon-circle" id="circle_NODE_01">G1</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G1</span>
-                    </div>
+                <!-- =================================================
+                     WAVEFORM
+                     ================================================= -->
 
-                    <!-- Triangular Layout Dashed Lines -->
-                    <svg width="220" height="150" style="position: absolute; top: 40px; pointer-events: none;">
-                        <line x1="110" y1="20" x2="35" y2="120" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" stroke-dasharray="4" />
-                        <line x1="110" y1="20" x2="185" y2="120" stroke="rgba(16, 185, 129, 0.4)" stroke-width="2" stroke-dasharray="4" />
-                        <line x1="35" y1="120" x2="185" y2="120" stroke="rgba(6, 182, 212, 0.4)" stroke-width="2" stroke-dasharray="4" />
-                    </svg>
+                <div class="waveform-canvas-wrapper waveform-large">
 
-                    <!-- Triangle Node 2 (Bottom Left) -->
-                    <div class="trail-node" id="trail_NODE_02" onclick="openSTFTModal('NODE_02')" style="position: absolute; bottom: 35px; left: 15px;">
-                        <div class="node-icon-circle" id="circle_NODE_02">G2</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G2</span>
-                    </div>
+                    <canvas id="vibrationCanvas"></canvas>
 
-                    <!-- Triangle Node 3 (Bottom Right) -->
-                    <div class="trail-node" id="trail_NODE_03" onclick="openSTFTModal('NODE_03')" style="position: absolute; bottom: 35px; right: 15px;">
-                        <div class="node-icon-circle" id="circle_NODE_03">G3</div>
-                        <span style="font-size:0.75rem; font-weight:700;">G3</span>
-                    </div>
-
-                    <!-- Sensor Array Boundary Bottom -->
-                    <div style="position: absolute; bottom: 8px; font-size: 0.72rem; color: var(--color-emerald); font-weight: 700;">
-                        ======================================<br>
-                        Sensor Array Boundary
-                    </div>
-                </div>
-
-                <!-- TDOA Estimated Vector Summary Box -->
-                <div style="margin-top: 0.75rem; background: rgba(0,0,0,0.25); border-radius: 10px; padding: 0.6rem; border: 1px solid rgba(255,255,255,0.05); font-size: 0.8rem;">
-                    <div style="display: flex; justify-content: space-between; margin-bottom: 0.2rem;">
-                        <span style="color: var(--text-muted);">Estimated Path:</span>
-                        <strong style="color: var(--color-cyan);" id="tdoaVectorText">Localized Activity</strong>
-                    </div>
-                    <div style="display: flex; justify-content: space-between;">
-                        <span style="color: var(--text-muted);">Nearest Node:</span>
-                        <strong style="color: white;" id="nearestNodeText">G1 (0.0 ms)</strong>
-                    </div>
                 </div>
 
             </div>
 
-        </section>
 
-        <!-- Grid 3: Historical Intrusion Log Table -->
-        <section class="glass-card">
-            <div class="card-header">
-                <h2>Intrusion Alerts & Fusion Log History</h2>
-                <span style="font-size: 0.8rem; color: var(--text-muted);">💡 Click any detection event row to open STFT Spectrogram</span>
+            <!-- =====================================================
+                 ELEPHANT DETECTION ALERT
+                 THIS IS DIRECTLY BELOW THE WAVEFORM
+                 ===================================================== -->
+
+            <div
+                id="elephantDetectionAlert"
+                class="elephant-alert hidden"
+            >
+
+                <div class="elephant-alert-left">
+
+                    <div class="elephant-alert-icon">
+                        🚨
+                    </div>
+
+
+                    <div>
+
+                        <div
+                            class="elephant-alert-title"
+                            id="elephantAlertTitle"
+                        >
+                            ELEPHANT DETECTED!
+                        </div>
+
+
+                        <div
+                            class="elephant-alert-description"
+                            id="elephantAlertDescription"
+                        >
+                            Ground vibration exceeded the detection threshold.
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <div class="elephant-alert-details">
+
+                    <div>
+
+                        <span>Time</span>
+
+                        <strong id="elephantAlertTime">
+                            --
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>Max ADC</span>
+
+                        <strong id="elephantAlertAmplitude">
+                            --
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>Trigger</span>
+
+                        <strong
+                            id="elephantAlertTrigger"
+                            class="alert-trigger-text"
+                        >
+                            --
+                        </strong>
+
+                    </div>
+
+
+                    <div>
+
+                        <span>Sensor</span>
+
+                        <strong id="elephantAlertSensor">
+                            --
+                        </strong>
+
+                    </div>
+
+                </div>
+
+
+                <div class="elephant-alarm-indicator">
+
+                    <span class="alarm-wave">
+                        ))))
+                    </span>
+
+                    <button
+                        type="button"
+                        class="alarm-button"
+                        onclick="testAlarmSound()"
+                    >
+                        🔊 ALARM ACTIVE
+                    </button>
+
+                    <span class="alarm-wave">
+                        ((((
+                    </span>
+
+                </div>
+
             </div>
-            <div class="table-container">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Timestamp</th>
-                            <th>Trigger Sequence</th>
-                            <th>Threat Level</th>
-                            <th>Confidence</th>
-                            <th>Details</th>
-                        </tr>
-                    </thead>
-                    <tbody id="alertsTableBody">
-                        <tr>
-                            <td colspan="5" style="text-align: center; color: var(--text-muted);">Loading alert records...</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
+
+
+            <!-- =====================================================
+                 LOWER SECTION
+                 TDOA MAP + FUSION LOG
+                 ===================================================== -->
+
+            <section class="lower-dashboard-grid">
+
+
+                <!-- =================================================
+                     TRIANGULAR TDOA MAP
+                     ================================================= -->
+
+                <div class="glass-card tdoa-map-card">
+
+                    <div class="card-header">
+
+                        <h2>
+                            Triangular TDOA Compass Map
+                        </h2>
+
+                    </div>
+
+
+                    <div
+                        class="tdoa-map-container"
+                    >
+
+                        <div
+                            class="tdoa-map-title"
+                        >
+                            SENSOR ARRAY
+                        </div>
+
+
+                        <!-- G1 -->
+
+                        <div
+                            class="trail-node"
+                            id="trail_NODE_01"
+                            onclick="openSTFTModal('NODE_01')"
+                            style="
+                                position:absolute;
+                                top:35px;
+                            "
+                        >
+
+                            <div
+                                class="node-icon-circle"
+                                id="circle_NODE_01"
+                            >
+                                G1
+                            </div>
+
+                            <span>
+                                G1
+                            </span>
+
+                        </div>
+
+
+                        <!-- TRIANGLE -->
+
+                        <svg
+                            width="220"
+                            height="150"
+                            class="tdoa-triangle"
+                        >
+
+                            <line
+                                x1="110"
+                                y1="20"
+                                x2="35"
+                                y2="120"
+                                stroke="rgba(16,185,129,0.4)"
+                                stroke-width="2"
+                                stroke-dasharray="4"
+                            />
+
+                            <line
+                                x1="110"
+                                y1="20"
+                                x2="185"
+                                y2="120"
+                                stroke="rgba(16,185,129,0.4)"
+                                stroke-width="2"
+                                stroke-dasharray="4"
+                            />
+
+                            <line
+                                x1="35"
+                                y1="120"
+                                x2="185"
+                                y2="120"
+                                stroke="rgba(6,182,212,0.4)"
+                                stroke-width="2"
+                                stroke-dasharray="4"
+                            />
+
+                        </svg>
+
+
+                        <!-- G2 -->
+
+                        <div
+                            class="trail-node"
+                            id="trail_NODE_02"
+                            onclick="openSTFTModal('NODE_02')"
+                            style="
+                                position:absolute;
+                                bottom:35px;
+                                left:15px;
+                            "
+                        >
+
+                            <div
+                                class="node-icon-circle"
+                                id="circle_NODE_02"
+                            >
+                                G2
+                            </div>
+
+                            <span>
+                                G2
+                            </span>
+
+                        </div>
+
+
+                        <!-- G3 -->
+
+                        <div
+                            class="trail-node"
+                            id="trail_NODE_03"
+                            onclick="openSTFTModal('NODE_03')"
+                            style="
+                                position:absolute;
+                                bottom:35px;
+                                right:15px;
+                            "
+                        >
+
+                            <div
+                                class="node-icon-circle"
+                                id="circle_NODE_03"
+                            >
+                                G3
+                            </div>
+
+                            <span>
+                                G3
+                            </span>
+
+                        </div>
+
+
+                        <div
+                            class="tdoa-boundary"
+                        >
+                            Sensor Array Boundary
+                        </div>
+
+                    </div>
+
+
+                    <!-- TDOA SUMMARY -->
+
+                    <div class="tdoa-summary-box">
+
+                        <div>
+
+                            <span>
+                                Estimated Path:
+                            </span>
+
+                            <strong
+                                id="tdoaVectorText"
+                            >
+                                Localized Activity
+                            </strong>
+
+                        </div>
+
+
+                        <div>
+
+                            <span>
+                                Nearest Node:
+                            </span>
+
+                            <strong
+                                id="nearestNodeText"
+                            >
+                                G1
+                            </strong>
+
+                        </div>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =================================================
+                     FUSION LOG
+                     ================================================= -->
+
+                <div class="glass-card fusion-log-card">
+
+                    <div class="card-header">
+
+                        <h2>
+                            Intrusion Alerts & Fusion Log History
+                        </h2>
+
+                        <span
+                            style="
+                                font-size:0.78rem;
+                                color:var(--text-muted);
+                            "
+                        >
+                            💡 Click any detection event row to open
+                            STFT Spectrogram
+                        </span>
+
+                    </div>
+
+
+                    <div class="table-wrapper">
+
+                        <table class="alerts-table">
+
+                            <thead>
+
+                                <tr>
+
+                                    <th>
+                                        Timestamp
+                                    </th>
+
+                                    <th>
+                                        Trigger Sequence
+                                    </th>
+
+                                    <th>
+                                        Threat Level
+                                    </th>
+
+                                    <th>
+                                        Confidence
+                                    </th>
+
+                                    <th>
+                                        Details
+                                    </th>
+
+                                </tr>
+
+                            </thead>
+
+
+                            <tbody
+                                id="alertsTableBody"
+                            >
+
+                                <tr>
+
+                                    <td
+                                        colspan="5"
+                                        style="
+                                            text-align:center;
+                                            color:var(--text-muted);
+                                        "
+                                    >
+                                        Loading alert records...
+                                    </td>
+
+                                </tr>
+
+                            </tbody>
+
+                        </table>
+
+                    </div>
+
+                </div>
+
+            </section>
+
         </section>
 
     </div>
