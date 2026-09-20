@@ -1243,7 +1243,7 @@ function updateNodeUI(node) {
             pill.className = "node-pill alert";
             pill.style = "";
         } else {
-            pill.textContent = "ONLINE (SIM)";
+            pill.textContent = "ONLINE";
             pill.className = "node-pill online";
             pill.style = "";
         }
@@ -1253,8 +1253,7 @@ function updateNodeUI(node) {
 function showElephantDetectedAlert({
     sensor = "G1",
     trigger = "ADC Threshold Exceeded",
-    description =
-        "Ground vibration exceeded the detection threshold."
+    description = ""
 } = {}) {
 
     const now =
@@ -1268,7 +1267,7 @@ function showElephantDetectedAlert({
      */
 
     if (
-        trigger !== "Simulation Trigger" &&
+        trigger !== "Elephant Detection" &&
         now -
         lastElephantAlertTime <
         ALERT_COOLDOWN_MS
@@ -1340,7 +1339,9 @@ function showElephantDetectedAlert({
     if (desc) {
 
         desc.textContent =
-            description;
+            "";
+        desc.style.display =
+            "none";
     }
 
 
@@ -1373,7 +1374,7 @@ function showElephantDetectedAlert({
      * ACTIVATE ALARM
      */
 
-    if (trigger !== "Simulation Trigger") {
+    if (trigger !== "Elephant Detection") {
         playAlertSound();
     }
 }
@@ -1443,14 +1444,9 @@ function showSpeciesDetectionAlert(type) {
                 "ELEPHANT DETECTED!";
         }
 
-        if (description) {
-            description.textContent =
-                "Ground vibration exceeds the elephant detection threshold.";
-        }
-
         if (trigger) {
             trigger.textContent =
-                "Simulation — Elephant";
+                "Elephant Detection";
         }
 
     }
@@ -1464,14 +1460,9 @@ function showSpeciesDetectionAlert(type) {
                 "HUMAN DETECTED!";
         }
 
-        if (description) {
-            description.textContent =
-                "Ground vibration pattern is within the simulated human range.";
-        }
-
         if (trigger) {
             trigger.textContent =
-                "Simulation — Human";
+                "Human Detection";
         }
 
     }
@@ -1485,16 +1476,22 @@ function showSpeciesDetectionAlert(type) {
                 "BOVID DETECTED!";
         }
 
-        if (description) {
-            description.textContent =
-                "Ground vibration pattern is within the simulated bovid range.";
-        }
-
         if (trigger) {
             trigger.textContent =
-                "Simulation — Bovid";
+                "Bovid Detection";
         }
 
+    }
+
+    /*
+     * NO EXTRA DESCRIPTION
+     */
+
+    if (description) {
+        description.textContent =
+            "";
+        description.style.display =
+            "none";
     }
 
     /*
@@ -2517,10 +2514,10 @@ async function triggerSimulation(
             simulationNode,
 
         trigger:
-            "Simulation Trigger",
+            "Elephant Detection",
 
         description:
-            "Simulated elephant intrusion event detected."
+            ""
     });
 
 
