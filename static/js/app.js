@@ -146,102 +146,6 @@ function getVisibleData(data) {
         : data.slice(data.length - WAVEFORM_DISPLAY_POINTS);
 }
 
-function formatWaveformTimestamp(timestampSeconds) {
-
-    if (
-        timestampSeconds === null ||
-        timestampSeconds === undefined ||
-        !Number.isFinite(Number(timestampSeconds))
-    ) {
-        return "--:--:--";
-    }
-
-    const date =
-        new Date(Number(timestampSeconds) * 1000);
-
-    const hours =
-        String(date.getHours()).padStart(2, "0");
-
-    const minutes =
-        String(date.getMinutes()).padStart(2, "0");
-
-    const seconds =
-        String(date.getSeconds()).padStart(2, "0");
-
-    return `${hours}:${minutes}:${seconds}`;
-}
-
-function getWaveformTimeLabels(timestamps) {
-
-    if (
-        !Array.isArray(timestamps) ||
-        timestamps.length === 0
-    ) {
-        return [
-            "--:--:--",
-            "--:--:--",
-            "--:--:--",
-            "--:--:--",
-            "--:--:--"
-        ];
-    }
-
-    const validTimestamps =
-        timestamps.filter(
-            value =>
-                Number.isFinite(
-                    Number(value)
-                )
-        );
-
-    if (validTimestamps.length === 0) {
-        return [
-            "--:--:--",
-            "--:--:--",
-            "--:--:--",
-            "--:--:--",
-            "--:--:--"
-        ];
-    }
-
-    const first =
-        Number(validTimestamps[0]);
-
-    const last =
-        Number(
-            validTimestamps[
-                validTimestamps.length - 1
-            ]
-        );
-
-    const duration =
-        Math.max(
-            0,
-            last - first
-        );
-
-    return [
-        formatWaveformTimestamp(
-            first
-        ),
-
-        formatWaveformTimestamp(
-            first + duration * 0.25
-        ),
-
-        formatWaveformTimestamp(
-            first + duration * 0.50
-        ),
-
-        formatWaveformTimestamp(
-            first + duration * 0.75
-        ),
-
-        formatWaveformTimestamp(
-            last
-        )
-    ];
-}
 
 function renderWaveform(timestamp = 0) {
 
@@ -354,11 +258,6 @@ function renderWaveform(timestamp = 0) {
     const zData =
         getVisibleData(
             history.z
-        );
-
-    const timestampData =
-        getVisibleData(
-            history.timestamps
         );
 
 
@@ -522,10 +421,13 @@ function renderWaveform(timestamp = 0) {
         "top";
 
 
-    const timeLabels =
-        getWaveformTimeLabels(
-            timestampData
-        );
+    const timeLabels = [
+        "-10 s",
+        "-7.5 s",
+        "-5 s",
+        "-2.5 s",
+        "0 s"
+    ];
 
 
     for (
@@ -536,9 +438,8 @@ function renderWaveform(timestamp = 0) {
 
         const x =
             graphLeft +
-            (i /
-                (timeLabels.length - 1)) *
-                graphWidth;
+            (i / (timeLabels.length - 1)) *
+            graphWidth;
 
         ctx.fillText(
             timeLabels[i],
