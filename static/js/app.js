@@ -25,16 +25,26 @@ let axisVisibility = {
 };
 
 let triaxialHistory = {
-    "NODE_01": { x: [], y: [], z: [] },
-    "NODE_02": { x: [], y: [], z: [] },
-    "NODE_03": { x: [], y: [], z: [] }
+    "NODE_01": { x: [], y: [], z: [], timestamps: [] },
+    "NODE_02": { x: [], y: [], z: [], timestamps: [] },
+    "NODE_03": { x: [], y: [], z: [], timestamps: [] }
 };
 
 function createInitialHistory() {
+
     for (const nodeId of Object.keys(triaxialHistory)) {
-        triaxialHistory[nodeId].x = new Array(maxHistoryPoints).fill(0);
-        triaxialHistory[nodeId].y = new Array(maxHistoryPoints).fill(0);
-        triaxialHistory[nodeId].z = new Array(maxHistoryPoints).fill(0);
+
+        triaxialHistory[nodeId].x =
+            new Array(maxHistoryPoints).fill(0);
+
+        triaxialHistory[nodeId].y =
+            new Array(maxHistoryPoints).fill(0);
+
+        triaxialHistory[nodeId].z =
+            new Array(maxHistoryPoints).fill(0);
+
+        triaxialHistory[nodeId].timestamps =
+            new Array(maxHistoryPoints).fill(null);
     }
 }
 
@@ -128,7 +138,105 @@ function getVisibleData(data) {
         : data.slice(data.length - WAVEFORM_DISPLAY_POINTS);
 }
 
+function formatWaveformTimestamp(timestampSeconds) {
+
+    if (
+        timestampSeconds === null ||
+        timestampSeconds === undefined ||
+        !Number.isFinite(Number(timestampSeconds))
+    ) {
+        return "--:--:--";
+    }
+
+    const date =
+        new Date(Number(timestampSeconds) * 1000);
+
+    const hours =
+        String(date.getHours()).padStart(2, "0");
+
+    const minutes =
+        String(date.getMinutes()).padStart(2, "0");
+
+    const seconds =
+        String(date.getSeconds()).padStart(2, "0");
+
+    return `${hours}:${minutes}:${seconds}`;
+}
+
+function getWaveformTimeLabels(timestamps) {
+
+    if (
+        !Array.isArray(timestamps) ||
+        timestamps.length === 0
+    ) {
+        return [
+            "--:--:--",
+            "--:--:--",
+            "--:--:--",
+            "--:--:--",
+            "--:--:--"
+        ];
+    }
+
+    const validTimestamps =
+        timestamps.filter(
+            value =>
+                Number.isFinite(
+                    Number(value)
+                )
+        );
+
+    if (validTimestamps.length === 0) {
+        return [
+            "--:--:--",
+            "--:--:--",
+            "--:--:--",
+            "--:--:--",
+            "--:--:--"
+        ];
+    }
+
+    const first =
+        Number(validTimestamps[0]);
+
+    const last =
+        Number(
+            validTimestamps[
+                validTimestamps.length - 1
+            ]
+        );
+
+    const duration =
+        Math.max(
+            0,
+            last - first
+        );
+
+    return [
+        formatWaveformTimestamp(
+            first
+        ),
+
+        formatWaveformTimestamp(
+            first + duration * 0.25
+        ),
+
+        formatWaveformTimestamp(
+            first + duration * 0.50
+        ),
+
+        formatWaveformTimestamp(
+            first + duration * 0.75
+        ),
+
+        formatWaveformTimestamp(
+            last
+        )
+    ];
+}
+
 function renderWaveform(timestamp = 0) {
+
     if (!canvas || !ctx) {
         requestAnimationFrame(renderWaveform);
         return;
@@ -136,17 +244,23 @@ function renderWaveform(timestamp = 0) {
 
     if (
         lastWaveformRenderTime !== 0 &&
-        timestamp - lastWaveformRenderTime < WAVEFORM_UPDATE_INTERVAL_MS
+        timestamp - lastWaveformRenderTime <
+            WAVEFORM_UPDATE_INTERVAL_MS
     ) {
         requestAnimationFrame(renderWaveform);
         return;
     }
 
-    lastWaveformRenderTime = timestamp;
+    lastWaveformRenderTime =
+        timestamp;
 
-    const rect = canvas.getBoundingClientRect();
+    const rect =
+        canvas.getBoundingClientRect();
 
-    if (rect.width <= 0 || rect.height <= 0) {
+    if (
+        rect.width <= 0 ||
+        rect.height <= 0
+    ) {
         requestAnimationFrame(renderWaveform);
         return;
     }
@@ -159,19 +273,41 @@ function renderWaveform(timestamp = 0) {
     const marginLeft = 58;
     const marginRight = 18;
     const marginTop = 18;
-    const marginBottom = 38;
+    const marginBottom = 42;
 
-    const graphLeft = marginLeft;
-    const graphRight = width - marginRight;
-    const graphTop = marginTop;
-    const graphBottom = height - marginBottom;
+    const graphLeft =
+        marginLeft;
 
-    const graphWidth = graphRight - graphLeft;
-    const graphHeight = graphBottom - graphTop;
+    const graphRight =
+        width - marginRight;
 
-    ctx.clearRect(0, 0, width, height);
+    const graphTop =
+        marginTop;
 
-    ctx.fillStyle = "#10171B";
+    const graphBottom =
+        height - marginBottom;
+
+    const graphWidth =
+        graphRight - graphLeft;
+
+    const graphHeight =
+        graphBottom - graphTop;
+
+
+    /*
+     * CLEAR GRAPH
+     */
+
+    ctx.clearRect(
+        0,
+        0,
+        width,
+        height
+    );
+
+    ctx.fillStyle =
+        "#10171B";
+
     ctx.fillRect(
         graphLeft,
         graphTop,
@@ -179,152 +315,221 @@ function renderWaveform(timestamp = 0) {
         graphHeight
     );
 
-    const history = triaxialHistory[waveformNode];
+
+    const history =
+        triaxialHistory[
+            waveformNode
+        ];
 
     if (!history) {
-        requestAnimationFrame(renderWaveform);
+        requestAnimationFrame(
+            renderWaveform
+        );
         return;
     }
 
-    const xData = getVisibleData(history.x);
-    const yData = getVisibleData(history.y);
-    const zData = getVisibleData(history.z);
 
-    const visibleSeries = [];
+    /*
+     * LAST 10 SECONDS OF DATA
+     */
 
-    if (axisVisibility.X) visibleSeries.push(xData);
-    if (axisVisibility.Y) visibleSeries.push(yData);
-    if (axisVisibility.Z) visibleSeries.push(zData);
+    const xData =
+        getVisibleData(
+            history.x
+        );
 
-    const scale = getDisplayScale(visibleSeries);
+    const yData =
+        getVisibleData(
+            history.y
+        );
 
-    const yMin = -scale;
-    const yMax = scale;
+    const zData =
+        getVisibleData(
+            history.z
+        );
+
+    const timestampData =
+        getVisibleData(
+            history.timestamps
+        );
+
+
+    /*
+     * FIXED ADC AMPLITUDE SCALE
+     *
+     * Y AXIS:
+     *
+     * 0
+     * 1000
+     * 2000
+     * 3000
+     * 4000
+     * 5000
+     */
+
+    const yMin = 0;
+    const yMax = 5000;
+
 
     /*
      * GRID
      */
 
     ctx.lineWidth = 1;
-    ctx.strokeStyle = "rgba(255,255,255,0.08)";
 
-    const horizontalTicks = 4;
+    ctx.strokeStyle =
+        "rgba(255,255,255,0.08)";
 
-    for (let i = 0; i <= horizontalTicks; i++) {
-        const y =
-            graphTop +
-            (i / horizontalTicks) * graphHeight;
-
-        ctx.beginPath();
-        ctx.moveTo(graphLeft, y);
-        ctx.lineTo(graphRight, y);
-        ctx.stroke();
-    }
-
-    const verticalTicks = 5;
-
-    for (let i = 0; i <= verticalTicks; i++) {
-        const x =
-            graphLeft +
-            (i / verticalTicks) * graphWidth;
-
-        ctx.beginPath();
-        ctx.moveTo(x, graphTop);
-        ctx.lineTo(x, graphBottom);
-        ctx.stroke();
-    }
 
     /*
-     * ZERO LINE
+     * HORIZONTAL GRID
      */
 
-    const zeroY =
-        graphBottom -
-        ((0 - yMin) / (yMax - yMin)) *
-            graphHeight;
+    const horizontalTicks = 5;
 
-    ctx.strokeStyle = "rgba(255,255,255,0.30)";
-    ctx.lineWidth = 1.4;
-
-    ctx.beginPath();
-    ctx.moveTo(graphLeft, zeroY);
-    ctx.lineTo(graphRight, zeroY);
-    ctx.stroke();
-
-    /*
-     * Y AXIS
-     * Y = ADC AMPLITUDE
-     */
-
-    ctx.font = "12px Inter, Arial, sans-serif";
-    ctx.fillStyle = "rgba(220,230,235,0.72)";
-    ctx.textAlign = "right";
-    ctx.textBaseline = "middle";
-
-    for (let i = 0; i <= horizontalTicks; i++) {
-        const value =
-            yMax -
-            (i / horizontalTicks) *
-                (yMax - yMin);
+    for (
+        let i = 0;
+        i <= horizontalTicks;
+        i++
+    ) {
 
         const y =
-            graphTop +
+            graphBottom -
             (i / horizontalTicks) *
                 graphHeight;
 
+        ctx.beginPath();
+
+        ctx.moveTo(
+            graphLeft,
+            y
+        );
+
+        ctx.lineTo(
+            graphRight,
+            y
+        );
+
+        ctx.stroke();
+    }
+
+
+    /*
+     * VERTICAL GRID
+     */
+
+    const verticalTicks = 5;
+
+    for (
+        let i = 0;
+        i <= verticalTicks;
+        i++
+    ) {
+
+        const x =
+            graphLeft +
+            (i / verticalTicks) *
+                graphWidth;
+
+        ctx.beginPath();
+
+        ctx.moveTo(
+            x,
+            graphTop
+        );
+
+        ctx.lineTo(
+            x,
+            graphBottom
+        );
+
+        ctx.stroke();
+    }
+
+
+    /*
+     * Y AXIS LABELS
+     *
+     * ADC AMPLITUDE
+     */
+
+    ctx.font =
+        "12px Inter, Arial, sans-serif";
+
+    ctx.fillStyle =
+        "rgba(220,230,235,0.72)";
+
+    ctx.textAlign =
+        "right";
+
+    ctx.textBaseline =
+        "middle";
+
+
+    for (
+        let i = 0;
+        i <= horizontalTicks;
+        i++
+    ) {
+
+        const value =
+            i * 1000;
+
+        const y =
+            graphBottom -
+            (value / 5000) *
+                graphHeight;
+
         ctx.fillText(
-            `${Number(value.toFixed(1))}`,
+            `${value}`,
             graphLeft - 8,
             y
         );
     }
 
-    ctx.save();
-
-    ctx.translate(
-        15,
-        graphTop + graphHeight / 2
-    );
-
-    ctx.rotate(-Math.PI / 2);
-
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-
-    ctx.font = "11px Inter, Arial, sans-serif";
-    ctx.fillStyle = "rgba(220,230,235,0.60)";
-
-    ctx.fillText(
-        "ADC Amplitude",
-        0,
-        0
-    );
-
-    ctx.restore();
 
     /*
-     * X AXIS
-     * X = TIME
+     * IMPORTANT:
+     * NO "mm/s" LABEL.
+     *
+     * The previous mm/s label has
+     * intentionally been removed.
      */
 
-    ctx.font = "11px Inter, Arial, sans-serif";
-    ctx.fillStyle = "rgba(220,230,235,0.60)";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "top";
 
-    const timeLabels = [
-        "-10 s",
-        "-7.5 s",
-        "-5 s",
-        "-2.5 s",
-        "0 s"
-    ];
+    /*
+     * REAL-TIME X-AXIS
+     */
 
-    for (let i = 0; i < timeLabels.length; i++) {
+    ctx.font =
+        "11px Inter, Arial, sans-serif";
+
+    ctx.fillStyle =
+        "rgba(220,230,235,0.60)";
+
+    ctx.textAlign =
+        "center";
+
+    ctx.textBaseline =
+        "top";
+
+
+    const timeLabels =
+        getWaveformTimeLabels(
+            timestampData
+        );
+
+
+    for (
+        let i = 0;
+        i < timeLabels.length;
+        i++
+    ) {
 
         const x =
             graphLeft +
-            (i / (timeLabels.length - 1)) *
+            (i /
+                (timeLabels.length - 1)) *
                 graphWidth;
 
         ctx.fillText(
@@ -334,7 +539,15 @@ function renderWaveform(timestamp = 0) {
         );
     }
 
-    function drawTrace(data, lineColor) {
+
+    /*
+     * DRAW WAVEFORM
+     */
+
+    function drawTrace(
+        data,
+        lineColor
+    ) {
 
         if (
             !Array.isArray(data) ||
@@ -348,7 +561,9 @@ function renderWaveform(timestamp = 0) {
                 data.length,
                 Math.max(
                     300,
-                    Math.floor(graphWidth * 1.5)
+                    Math.floor(
+                        graphWidth * 1.5
+                    )
                 )
             );
 
@@ -361,13 +576,25 @@ function renderWaveform(timestamp = 0) {
                 )
             );
 
-        ctx.beginPath();
-        ctx.strokeStyle = lineColor;
-        ctx.lineWidth = 1.35;
-        ctx.lineJoin = "round";
-        ctx.lineCap = "round";
 
-        let started = false;
+        ctx.beginPath();
+
+        ctx.strokeStyle =
+            lineColor;
+
+        ctx.lineWidth =
+            1.35;
+
+        ctx.lineJoin =
+            "round";
+
+        ctx.lineCap =
+            "round";
+
+
+        let started =
+            false;
+
 
         for (
             let index = 0;
@@ -375,14 +602,26 @@ function renderWaveform(timestamp = 0) {
             index += stride
         ) {
 
-            const value =
-                Number(data[index]);
+            let value =
+                Number(
+                    data[index]
+                );
 
-            if (!Number.isFinite(value)) {
+            if (
+                !Number.isFinite(value)
+            ) {
                 continue;
             }
 
-            const clippedValue =
+
+            /*
+             * ADC RANGE
+             *
+             * Keep values inside
+             * 0 - 5000.
+             */
+
+            value =
                 Math.max(
                     yMin,
                     Math.min(
@@ -391,98 +630,162 @@ function renderWaveform(timestamp = 0) {
                     )
                 );
 
+
             const x =
                 graphLeft +
                 (index /
                     (data.length - 1)) *
                     graphWidth;
 
+
             const y =
                 graphBottom -
-                ((clippedValue - yMin) /
+                ((value - yMin) /
                     (yMax - yMin)) *
                     graphHeight;
 
+
             if (!started) {
-                ctx.moveTo(x, y);
+
+                ctx.moveTo(
+                    x,
+                    y
+                );
+
                 started = true;
+
             } else {
-                ctx.lineTo(x, y);
+
+                ctx.lineTo(
+                    x,
+                    y
+                );
             }
         }
+
+
+        /*
+         * Always draw final sample.
+         */
 
         const lastIndex =
             data.length - 1;
 
-        const lastValue =
-            Number(data[lastIndex]);
-
         if (
-            Number.isFinite(lastValue)
+            lastIndex >= 0
         ) {
 
-            const clippedValue =
-                Math.max(
-                    yMin,
-                    Math.min(
-                        yMax,
-                        lastValue
-                    )
+            const lastValue =
+                Number(
+                    data[lastIndex]
                 );
 
-            const x = graphRight;
+            if (
+                Number.isFinite(
+                    lastValue
+                )
+            ) {
 
-            const y =
-                graphBottom -
-                ((clippedValue - yMin) /
-                    (yMax - yMin)) *
-                    graphHeight;
+                const value =
+                    Math.max(
+                        yMin,
+                        Math.min(
+                            yMax,
+                            lastValue
+                        )
+                    );
 
-            if (!started) {
-                ctx.moveTo(x, y);
-            } else {
-                ctx.lineTo(x, y);
+
+                const x =
+                    graphRight;
+
+
+                const y =
+                    graphBottom -
+                    ((value - yMin) /
+                        (yMax - yMin)) *
+                        graphHeight;
+
+
+                if (!started) {
+
+                    ctx.moveTo(
+                        x,
+                        y
+                    );
+
+                } else {
+
+                    ctx.lineTo(
+                        x,
+                        y
+                    );
+                }
             }
         }
+
 
         if (started) {
             ctx.stroke();
         }
     }
 
+
+    /*
+     * X CHANNEL
+     */
+
     if (axisVisibility.X) {
+
         drawTrace(
             xData,
             "#2F80ED"
         );
     }
 
+
+    /*
+     * Y CHANNEL
+     */
+
     if (axisVisibility.Y) {
+
         drawTrace(
             yData,
             "#F2994A"
         );
     }
 
+
+    /*
+     * Z CHANNEL
+     */
+
     if (axisVisibility.Z) {
+
         drawTrace(
             zData,
             "#10B981"
         );
     }
 
+
     /*
-     * TOP LABEL
+     * GRAPH TOP LABEL
      */
 
     ctx.font =
         "11px Inter, Arial, sans-serif";
 
-    ctx.textBaseline = "top";
-    ctx.textAlign = "left";
+    ctx.textBaseline =
+        "top";
+
+    ctx.textAlign =
+        "left";
 
     ctx.fillStyle =
         "rgba(220,230,235,0.60)";
+
 
     ctx.fillText(
         `${waveformNode.replace(
@@ -493,8 +796,17 @@ function renderWaveform(timestamp = 0) {
         graphTop + 5
     );
 
-    ctx.textAlign = "right";
-    ctx.fillStyle = "#10B981";
+
+    /*
+     * LIVE INDICATOR
+     */
+
+    ctx.textAlign =
+        "right";
+
+    ctx.fillStyle =
+        "#10B981";
+
 
     ctx.fillText(
         `● LIVE • ${WAVEFORM_RATE_HZ} Hz`,
@@ -502,7 +814,10 @@ function renderWaveform(timestamp = 0) {
         graphTop + 5
     );
 
-    requestAnimationFrame(renderWaveform);
+
+    requestAnimationFrame(
+        renderWaveform
+    );
 }
 
 function initWebSocket() {
@@ -576,6 +891,36 @@ function handleServerMessage(msg) {
                         d.wave_z.length
                     );
 
+                const sampleRate =
+                    safeNum(
+                        d.sample_rate_hz,
+                        WAVEFORM_RATE_HZ
+                    );
+
+                /*
+                 * Backend timestamp represents
+                 * the time at which this waveform
+                 * packet reached the backend.
+                 *
+                 * We treat it as the timestamp
+                 * of the last sample in this block.
+                 */
+
+                const packetEndTime =
+                    safeNum(
+                        d.timestamp,
+                        Date.now() / 1000
+                    );
+
+                const blockDuration =
+                    sampleCount /
+                    sampleRate;
+
+                const packetStartTime =
+                    packetEndTime -
+                    blockDuration;
+
+
                 for (
                     let i = 0;
                     i < sampleCount;
@@ -593,83 +938,117 @@ function handleServerMessage(msg) {
                     history.z.push(
                         Number(d.wave_z[i])
                     );
+
+
+                    /*
+                     * Calculate the real timestamp
+                     * of each sample.
+                     */
+
+                    const sampleTimestamp =
+                        packetStartTime +
+                        (i / sampleRate);
+
+                    history.timestamps.push(
+                        sampleTimestamp
+                    );
                 }
+
+
+                /*
+                 * Keep only the configured
+                 * waveform history length.
+                 */
 
                 if (
                     history.x.length >
                     maxHistoryPoints
                 ) {
+
+                    const removeCount =
+                        history.x.length -
+                        maxHistoryPoints;
+
                     history.x.splice(
                         0,
-                        history.x.length -
-                            maxHistoryPoints
+                        removeCount
                     );
-                }
 
-                if (
-                    history.y.length >
-                    maxHistoryPoints
-                ) {
                     history.y.splice(
                         0,
-                        history.y.length -
-                            maxHistoryPoints
+                        removeCount
                     );
-                }
 
-                if (
-                    history.z.length >
-                    maxHistoryPoints
-                ) {
                     history.z.splice(
                         0,
-                        history.z.length -
-                            maxHistoryPoints
+                        removeCount
+                    );
+
+                    history.timestamps.splice(
+                        0,
+                        removeCount
                     );
                 }
 
+
             } else {
+
+                /*
+                 * Fallback when a complete
+                 * waveform block is not available.
+                 */
+
+                const currentTime =
+                    safeNum(
+                        d.timestamp,
+                        Date.now() / 1000
+                    );
+
 
                 history.x.push(
                     safeNum(
                         d.vib_x,
-                        0
+                        safeNum(
+                            d.vibration_val,
+                            0
+                        )
                     )
                 );
 
                 history.y.push(
                     safeNum(
                         d.vib_y,
-                        0
+                        safeNum(
+                            d.vibration_val,
+                            0
+                        )
                     )
                 );
 
                 history.z.push(
                     safeNum(
                         d.vib_z,
-                        0
+                        safeNum(
+                            d.vibration_val,
+                            0
+                        )
                     )
                 );
+
+                history.timestamps.push(
+                    currentTime
+                );
+
 
                 if (
                     history.x.length >
                     maxHistoryPoints
                 ) {
+
                     history.x.shift();
-                }
-
-                if (
-                    history.y.length >
-                    maxHistoryPoints
-                ) {
                     history.y.shift();
-                }
-
-                if (
-                    history.z.length >
-                    maxHistoryPoints
-                ) {
                     history.z.shift();
+                    history.timestamps.shift();
                 }
             }
         }
