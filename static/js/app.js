@@ -926,8 +926,19 @@ function handleServerMessage(msg) {
 
         if (triaxialHistory[nodeId]) {
 
-            const history =
-                triaxialHistory[nodeId];
+            if (
+                simulationActive &&
+                nodeId === simulationNodeId
+            ) {
+                /*
+                 * Do not overwrite the simulated waveform
+                 * with incoming live telemetry while simulation
+                 * is running.
+                 */
+            } else {
+
+                const history =
+                    triaxialHistory[nodeId];
 
             if (
                 Array.isArray(d.wave_x) &&
@@ -1104,6 +1115,7 @@ function handleServerMessage(msg) {
                 }
             }
         }
+    }
 
         if (msg.alert) {
             triggerAlertUI(
@@ -1645,23 +1657,29 @@ function startLiveSimulationWaveform(
     simulationActive =
         true;
 
+
     simulationNodeId =
         nodeId;
 
+
     simulationStartTime =
         performance.now();
+
 
     simulationSampleIndex =
         0;
 
 
     /*
-     * Clear old simulation waveform.
+     * Clear previous waveform.
      */
 
     history.x.length = 0;
+
     history.y.length = 0;
+
     history.z.length = 0;
+
     if (history.timestamps) {
         history.timestamps.length = 0;
     }
@@ -1669,7 +1687,7 @@ function startLiveSimulationWaveform(
 
     /*
      * ======================================================
-     * PREFILL THE 10 SECOND WINDOW
+     * PRE-FILL THE SCREEN WITH REALISTIC GROUND VIBRATION
      * ======================================================
      */
 
@@ -1684,16 +1702,70 @@ function startLiveSimulationWaveform(
         i++
     ) {
 
+        const t =
+            (
+                i -
+                maxSamples
+            ) /
+            WAVEFORM_RATE_HZ;
+
+
+        const noise =
+            (
+                Math.random() -
+                0.5
+            ) * 70;
+
+
+        const base =
+
+            180 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                3.2 *
+                t
+            ) * 65 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                5.7 *
+                t
+            ) * 40 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                9.0 *
+                t
+            ) * 20 +
+
+            noise;
+
+
         history.x.push(
-            40
+            Math.max(
+                0,
+                base
+            )
         );
+
 
         history.y.push(
-            35
+            Math.max(
+                0,
+                base * 0.90
+            )
         );
 
+
         history.z.push(
-            30
+            Math.max(
+                0,
+                base * 0.75
+            )
         );
 
         if (history.timestamps) {
@@ -1704,7 +1776,7 @@ function startLiveSimulationWaveform(
 
     /*
      * ======================================================
-     * START SAMPLE GENERATION
+     * GENERATE NEW SAMPLE EVERY 5 ms
      * ======================================================
      */
 
@@ -1717,13 +1789,8 @@ function startLiveSimulationWaveform(
 
     /*
      * ======================================================
-     * START CONTINUOUS SCREEN ANIMATION
+     * CONTINUOUS SCREEN REFRESH
      * ======================================================
-     *
-     * This is VERY IMPORTANT.
-     *
-     * The waveform is redrawn continuously,
-     * not only when a new sample arrives.
      */
 
     simulationAnimationFrame =
@@ -1741,19 +1808,8 @@ function animateSimulationWaveform() {
     }
 
 
-    /*
-     * Redraw the waveform every browser frame.
-     *
-     * Usually ~60 FPS.
-     */
-
     renderWaveform();
 
-
-    /*
-     * Continue forever while simulation
-     * is active.
-     */
 
     simulationAnimationFrame =
         requestAnimationFrame(
@@ -1778,6 +1834,9 @@ function generateLiveSimulationSample() {
 
 
     if (!history) {
+
+        stopLiveSimulationWaveform();
+
         return;
     }
 
@@ -1788,7 +1847,7 @@ function generateLiveSimulationSample() {
 
 
     /*
-     * Stop after 10 seconds.
+     * Stop simulation after 10 seconds.
      */
 
     if (
@@ -1802,6 +1861,10 @@ function generateLiveSimulationSample() {
     }
 
 
+    /*
+     * Time of current sample.
+     */
+
     const t =
         simulationSampleIndex /
         WAVEFORM_RATE_HZ;
@@ -1812,228 +1875,332 @@ function generateLiveSimulationSample() {
 
     /*
      * ======================================================
-     * NORMAL CONTINUOUS GROUND VIBRATION
+     * REALISTIC GROUND VIBRATION
      * ======================================================
+     *
+     * Do NOT use a 40-60 ADC background.
+     *
+     * Use a visible low-level vibration of approximately
+     * 150-350 ADC.
      */
 
-    const normalX =
 
-        45 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            3.5 *
-            t
-        ) * 18 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            7.0 *
-            t
-        ) * 10;
+    const noise =
+        (
+            Math.random() - 0.5
+        ) * 100;
 
 
-    const normalY =
+    const groundVibration =
 
-        40 +
+        180 +
 
         Math.sin(
             2 *
             Math.PI *
-            4.2 *
+            3.2 *
             t
-        ) * 16 +
+        ) * 65 +
 
         Math.sin(
             2 *
             Math.PI *
-            8.0 *
+            5.7 *
             t
-        ) * 9;
-
-
-    const normalZ =
-
-        35 +
+        ) * 45 +
 
         Math.sin(
             2 *
             Math.PI *
-            3.8 *
+            9.3 *
             t
-        ) * 14 +
+        ) * 25 +
 
-        Math.sin(
-            2 *
-            Math.PI *
-            7.5 *
-            t
-        ) * 8;
+        noise;
 
 
     /*
      * ======================================================
-     * ELEPHANT EVENT
+     * ELEPHANT ARRIVAL
      * ======================================================
      *
-     * Strong continuous oscillations.
+     * The elephant event lasts several seconds.
      *
-     * NOT a Gaussian hump.
+     * It is NOT one smooth hump.
+     *
+     * It consists of continuous repeated vibration pulses.
      */
 
-    let elephantAmplitude =
-        0;
 
+    let elephantAmplitude = 0;
 
-    /*
-     * Elephant activity from 2s to 8s.
-     */
 
     if (
-        t >= 2 &&
-        t < 8
-    ) {
-
-        elephantAmplitude =
-            1;
-
-    } else if (
         t >= 1.5 &&
-        t < 2
-    ) {
-
-        /*
-         * Smoothly enter the vibration.
-         */
-
-        elephantAmplitude =
-            (
-                t - 1.5
-            ) / 0.5;
-
-    } else if (
-        t >= 8 &&
         t < 8.5
     ) {
 
         /*
-         * Smoothly leave the vibration.
+         * Smooth entry.
          */
 
-        elephantAmplitude =
-            (
-                8.5 - t
-            ) / 0.5;
+        if (
+            t >= 1.5 &&
+            t < 2.2
+        ) {
+
+            elephantAmplitude =
+                (
+                    t - 1.5
+                ) / 0.7;
+
+        }
+
+        /*
+         * Full vibration.
+         */
+
+        else if (
+            t >= 2.2 &&
+            t < 7.8
+        ) {
+
+            elephantAmplitude =
+                1;
+
+        }
+
+        /*
+         * Smooth exit.
+         */
+
+        else {
+
+            elephantAmplitude =
+                (
+                    8.5 - t
+                ) / 0.7;
+        }
     }
 
 
-    /*
-     * ======================================================
-     * CONTINUOUS VIBRATION
-     * ======================================================
-     */
-
-    const vibration =
-
-        Math.sin(
-            2 *
-            Math.PI *
-            5 *
-            t
-        ) * 900 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            8 *
-            t
-        ) * 550 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            12 *
-            t
-        ) * 300;
+    elephantAmplitude =
+        Math.max(
+            0,
+            Math.min(
+                1,
+                elephantAmplitude
+            )
+        );
 
 
     /*
-     * Add a positive ADC baseline.
+     * ======================================================
+     * REALISTIC ELEPHANT VIBRATION
+     * ======================================================
+     *
+     * Multiple frequencies are combined so that the waveform
+     * does NOT look like a mathematical sine wave.
      */
 
-    const elephantSignal =
+
+    const lowFrequencyComponent =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            2.2 *
+            t
+        ) * 500;
+
+
+    const bodyVibration =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            5.0 *
+            t
+        ) * 700;
+
+
+    const footImpact =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            8.5 *
+            t
+        ) * 420;
+
+
+    const highFrequencyComponent =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            13.0 *
+            t
+        ) * 180;
+
+
+    const irregularComponent =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            17.5 *
+            t
+        ) * 100;
+
+
+    /*
+     * Combine the vibration components.
+     */
+
+    const elephantVibration =
+
         elephantAmplitude *
         (
             1700 +
-            vibration
+
+            lowFrequencyComponent +
+
+            bodyVibration +
+
+            footImpact +
+
+            highFrequencyComponent +
+
+            irregularComponent
         );
 
 
     /*
      * ======================================================
-     * THREE AXES
+     * THREE GEOPHONE AXES
      * ======================================================
+     *
+     * Each axis has slightly different amplitude and phase.
      */
 
+
     const xValue =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                normalX +
-                elephantSignal
-            )
-        );
+
+        groundVibration +
+
+        elephantVibration;
 
 
     const yValue =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                normalY +
-                elephantSignal *
-                0.80
-            )
+
+        groundVibration * 0.90 +
+
+        elephantAmplitude *
+        (
+            1450 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                4.7 *
+                t +
+                0.4
+            ) * 650 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                8.2 *
+                t
+            ) * 380 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                12.5 *
+                t
+            ) * 170
         );
 
 
     const zValue =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                normalZ +
-                elephantSignal *
-                0.62
-            )
+
+        groundVibration * 0.75 +
+
+        elephantAmplitude *
+        (
+            1100 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                4.1 *
+                t +
+                0.7
+            ) * 500 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                7.5 *
+                t
+            ) * 300 +
+
+            Math.sin(
+                2 *
+                Math.PI *
+                11.8 *
+                t
+            ) * 150
         );
 
 
     /*
      * ======================================================
-     * APPEND ONLY ONE NEW SAMPLE
+     * ADC LIMIT
      * ======================================================
+     *
+     * Keep everything inside 0–5000 ADC.
      */
 
+
     history.x.push(
-        xValue
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                xValue
+            )
+        )
     );
+
 
     history.y.push(
-        yValue
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                yValue
+            )
+        )
     );
 
+
     history.z.push(
-        zValue
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                zValue
+            )
+        )
     );
 
 
     /*
      * ======================================================
-     * ROLLING 10 SECOND BUFFER
+     * ROLLING 10-SECOND BUFFER
      * ======================================================
      */
 
@@ -2068,11 +2235,41 @@ function generateLiveSimulationSample() {
         history.z.shift();
     }
 
+
     if (history.timestamps) {
         history.timestamps.push(Date.now() / 1000);
         while (history.timestamps.length > maxSamples) {
             history.timestamps.shift();
         }
+    }
+
+
+    /*
+     * IMPORTANT:
+     *
+     * Detection should use the actual simulated samples.
+     */
+
+    const currentMaximum =
+        Math.max(
+            xValue,
+            yValue,
+            zValue
+        );
+
+
+    if (
+        currentMaximum >=
+        ADC_ALERT_THRESHOLD
+    ) {
+
+        /*
+         * Existing alert logic can be called here.
+         *
+         * DO NOT repeatedly play the alarm from this point.
+         * The simulation alarm is already controlled separately.
+         */
+
     }
 }
 
