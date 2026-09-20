@@ -32,40 +32,135 @@ let simulationPeakADC = 0;
 
 let simulationImpacts = [];
 
-const SIMULATION_PROFILES = {
-    elephant: {
-        name: "ELEPHANT",
-        minPeak: 2700,
-        maxPeak: 4200,
-        baseAmplitude: 250,
-        impactCount: 18
-    },
-    human: {
-        name: "HUMAN",
-        minPeak: 700,
-        maxPeak: 1650,
-        baseAmplitude: 180,
-        impactCount: 10
-    },
-    bovid: {
-        name: "BOVID",
-        minPeak: 1700,
-        maxPeak: 2400,
-        baseAmplitude: 220,
-        impactCount: 14
+/*
+ * ===============================================================
+ * DYNAMIC ENVIRONMENTAL BASELINE GENERATOR
+ * ===============================================================
+ * No fixed baseline. Contains slow multi-harmonic drift,
+ * ambient ground vibration, random pink/white noise, and occasional
+ * micro-disturbances.
+ * X, Y, and Z are computed independently with out-of-phase drift,
+ * different vibration frequencies, and independent noise so they
+ * continuously cross each other.
+ */
+function generateDynamicBackground(t, axis = "x") {
+    // 1. Slow drift: unique phase (120 deg apart) & frequencies per axis
+    let drift = 0;
+    if (axis === "x") {
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 0.0)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 1.2)
+                    + 25 * Math.cos(2 * Math.PI * 0.02 * t);
+    } else if (axis === "y") {
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 2.094)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 3.3)
+                    + 25 * Math.cos(2 * Math.PI * 0.023 * t + 1.5);
+    } else { // "z"
+        drift = 320 + 85 * Math.sin(2 * Math.PI * 0.045 * t + 4.188)
+                    + 42 * Math.sin(2 * Math.PI * 0.11 * t + 5.4)
+                    + 25 * Math.sin(2 * Math.PI * 0.017 * t + 2.8);
     }
-};
 
-function createSimulationImpacts(profile, durationSeconds = 20) {
-    const impacts = [];
-    const count = profile.impactCount || 12;
-    const step = (durationSeconds - 3) / count;
-    for (let i = 0; i < count; i++) {
-        const center = 1.5 + i * step + (Math.random() - 0.5) * (step * 0.6);
-        const amp = profile.minPeak + Math.random() * (profile.maxPeak - profile.minPeak) - profile.baseAmplitude;
-        const width = 0.06 + Math.random() * 0.06;
-        impacts.push({ center, amplitude: Math.max(200, amp), width });
+    // 2. Natural ambient ground vibration: independent non-harmonic multi-tone
+    let groundVib = 0;
+    if (axis === "x") {
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.3 * t + 0.8)
+                  + 22 * Math.sin(2 * Math.PI * 5.7 * t + 1.4)
+                  + 14 * Math.sin(2 * Math.PI * 11.2 * t + 0.2);
+    } else if (axis === "y") {
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.7 * t + 2.1)
+                  + 22 * Math.sin(2 * Math.PI * 5.2 * t + 0.3)
+                  + 14 * Math.sin(2 * Math.PI * 12.8 * t + 1.7);
+    } else { // "z"
+        groundVib = 36 * Math.sin(2 * Math.PI * 2.1 * t + 3.7)
+                  + 22 * Math.sin(2 * Math.PI * 6.1 * t + 2.9)
+                  + 14 * Math.sin(2 * Math.PI * 10.5 * t + 0.9);
     }
+
+    // 3. Occasional small ambient micro-disturbances
+    const microPulseTime = t % 4.1;
+    let microDisturbance = 0;
+    if (microPulseTime < 0.25) {
+        const pEnv = Math.exp(-microPulseTime / 0.06);
+        if (axis === "x") microDisturbance = 45 * pEnv * Math.sin(2 * Math.PI * 18 * microPulseTime);
+        else if (axis === "y") microDisturbance = 55 * pEnv * Math.sin(2 * Math.PI * 21 * microPulseTime + 1.0);
+        else microDisturbance = 40 * pEnv * Math.sin(2 * Math.PI * 16 * microPulseTime + 2.0);
+    }
+
+    // 4. Independent random sensor jitter
+    const sensorNoise = (Math.random() - 0.5) * 55;
+
+    return drift + groundVib + microDisturbance + sensorNoise;
+}
+
+/*
+ * ===============================================================
+ * IRREGULAR TRANSIENT IMPACT GENERATOR
+ * ===============================================================
+ * Each impact has irregular timing, varying amplitude, and independent
+ * coupling weights for X, Y, and Z so axes naturally cross during impacts.
+ */
+function createSimulationImpacts(species = "elephant") {
+    const impacts = [];
+    let tCur = 1.9;
+    const endEventTime = 8.6;
+
+    let baseAmpMin = 2400, baseAmpMax = 3600;
+    let widthMin = 0.07, widthMax = 0.12;
+    let freqMin = 20, freqMax = 28;
+    let stepMin = 0.65, stepMax = 1.10;
+
+    if (species === "human") {
+        baseAmpMin = 500;
+        baseAmpMax = 1100;
+        widthMin = 0.04;
+        widthMax = 0.075;
+        freqMin = 30;
+        freqMax = 42;
+        stepMin = 0.55;
+        stepMax = 0.95;
+    } else if (species === "bovid") {
+        baseAmpMin = 1250;
+        baseAmpMax = 1850;
+        widthMin = 0.05;
+        widthMax = 0.09;
+        freqMin = 24;
+        freqMax = 36;
+        stepMin = 0.50;
+        stepMax = 0.85;
+    }
+
+    const variations = [0.8, 0.9, 1.0, 1.15, 0.85, 0.95, 1.05];
+
+    while (tCur < endEventTime) {
+        const ampVariation = variations[impacts.length % variations.length];
+        const amp = (baseAmpMin + Math.random() * (baseAmpMax - baseAmpMin)) * ampVariation;
+
+        // Independent X, Y, Z coupling weights: random dominant axis per impact
+        const weights = [
+            0.45 + Math.random() * 0.20,
+            0.65 + Math.random() * 0.20,
+            0.92 + Math.random() * 0.08
+        ];
+        for (let j = weights.length - 1; j > 0; j--) {
+            const k = Math.floor(Math.random() * (j + 1));
+            [weights[j], weights[k]] = [weights[k], weights[j]];
+        }
+
+        impacts.push({
+            center: tCur,
+            amplitude: amp,
+            width: widthMin + Math.random() * (widthMax - widthMin),
+            wx: weights[0],
+            wy: weights[1],
+            wz: weights[2],
+            freq_x: freqMin + Math.random() * (freqMax - freqMin),
+            freq_y: freqMin + Math.random() * (freqMax - freqMin),
+            freq_z: freqMin + Math.random() * (freqMax - freqMin)
+        });
+
+        tCur += stepMin + Math.random() * (stepMax - stepMin);
+    }
+
     return impacts;
 }
 
@@ -110,18 +205,62 @@ function createInitialHistory() {
 
     for (const nodeId of Object.keys(triaxialHistory)) {
 
-        triaxialHistory[nodeId].x =
-            new Array(maxHistoryPoints).fill(0);
+        triaxialHistory[nodeId].x = [];
+        triaxialHistory[nodeId].y = [];
+        triaxialHistory[nodeId].z = [];
+        triaxialHistory[nodeId].timestamps = [];
 
-        triaxialHistory[nodeId].y =
-            new Array(maxHistoryPoints).fill(0);
-
-        triaxialHistory[nodeId].z =
-            new Array(maxHistoryPoints).fill(0);
-
-        triaxialHistory[nodeId].timestamps =
-            new Array(maxHistoryPoints).fill(null);
+        for (let i = 0; i < maxHistoryPoints; i++) {
+            const t = (i - maxHistoryPoints) / WAVEFORM_RATE_HZ;
+            triaxialHistory[nodeId].x.push(
+                Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "x"))))
+            );
+            triaxialHistory[nodeId].y.push(
+                Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "y"))))
+            );
+            triaxialHistory[nodeId].z.push(
+                Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(t, "z"))))
+            );
+            triaxialHistory[nodeId].timestamps.push(null);
+        }
     }
+}
+
+let ambientBackgroundTimer = null;
+let ambientSampleTime = 0;
+
+function startAmbientBackgroundGenerator() {
+    if (ambientBackgroundTimer) return;
+    ambientBackgroundTimer = setInterval(() => {
+        if (simulationActive) return;
+
+        for (const nid of Object.keys(triaxialHistory)) {
+            const h = triaxialHistory[nid];
+            if (!h) continue;
+
+            for (let s = 0; s < 10; s++) {
+                const t = ambientSampleTime + (s / WAVEFORM_RATE_HZ);
+                const x = Math.max(0, Math.min(5000, generateDynamicBackground(t, "x")));
+                const y = Math.max(0, Math.min(5000, generateDynamicBackground(t, "y")));
+                const z = Math.max(0, Math.min(5000, generateDynamicBackground(t, "z")));
+
+                h.x.push(x);
+                h.y.push(y);
+                h.z.push(z);
+
+                const maxSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+                while (h.x.length > maxSamples) h.x.shift();
+                while (h.y.length > maxSamples) h.y.shift();
+                while (h.z.length > maxSamples) h.z.shift();
+
+                if (h.timestamps) {
+                    h.timestamps.push(Date.now() / 1000);
+                    while (h.timestamps.length > maxSamples) h.timestamps.shift();
+                }
+            }
+        }
+        ambientSampleTime += 10 / WAVEFORM_RATE_HZ;
+    }, 50);
 }
 
 createInitialHistory();
@@ -131,6 +270,7 @@ document.addEventListener("DOMContentLoaded", () => {
     initWaveformNodeSelector();
     initWebSocket();
     initSimulationButtons();
+    startAmbientBackgroundGenerator();
 });
 
 function initSimulationButtons() {
@@ -1851,14 +1991,31 @@ function startLiveSimulationWaveform(
     }
 
     /*
+     * Pre-fill the 10-second rolling display window with dynamic background
+     * so that the waveform graph begins with natural ambient ground vibration
+     * rather than an empty canvas or flat zero.
+     */
+    const prefillSamples =
+        WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+
+    for (let i = 0; i < prefillSamples; i++) {
+        const tPre = (i - prefillSamples) / WAVEFORM_RATE_HZ;
+        history.x.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "x")))));
+        history.y.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "y")))));
+        history.z.push(Math.round(Math.max(0, Math.min(5000, generateDynamicBackground(tPre, "z")))));
+        if (history.timestamps) {
+            history.timestamps.push(null);
+        }
+    }
+
+    /*
      * Generate random impact locations for
-     * this 20-second simulation.
+     * this species simulation.
      */
 
     simulationImpacts =
         createSimulationImpacts(
-            SIMULATION_PROFILES[type] || SIMULATION_PROFILES.elephant,
-            20
+            type
         );
 
     /*
@@ -1941,157 +2098,39 @@ function generateLiveSimulationSample() {
 
     simulationSampleIndex++;
 
-    const profile =
-        SIMULATION_PROFILES[
-            simulationType
-        ] || SIMULATION_PROFILES.elephant;
-
     /*
      * -------------------------------------------------------
-     * REALISTIC BACKGROUND
+     * DYNAMIC BASELINE & TRANSIENT IMPACTS
      * -------------------------------------------------------
      */
 
-    const noise =
-        (
-            Math.random() -
-            0.5
-        ) * 100;
+    const bgX = generateDynamicBackground(t, "x");
+    const bgY = generateDynamicBackground(t, "y");
+    const bgZ = generateDynamicBackground(t, "z");
 
-    const background =
+    let eventX = 0;
+    let eventY = 0;
+    let eventZ = 0;
 
-        180 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            0.8 *
-            t
-        ) * 55 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            4.5 *
-            t
-        ) * 35 +
-
-        Math.sin(
-            2 *
-            Math.PI *
-            9.0 *
-            t
-        ) * 20 +
-
-        noise;
-
-    /*
-     * -------------------------------------------------------
-     * TRANSIENT IMPACTS
-     * -------------------------------------------------------
-     */
-
-    let impactSignal = 0;
-
-    for (
-        const impact
-        of simulationImpacts
-    ) {
-
-        const distance =
-            t -
-            impact.center;
-
-        if (
-            Math.abs(distance) >
-            impact.width * 4
-        ) {
+    for (const impact of simulationImpacts) {
+        const distance = t - impact.center;
+        if (Math.abs(distance) > impact.width * 4.0) {
             continue;
         }
 
-        const envelope =
-            Math.exp(
-                -Math.abs(distance) /
-                impact.width
-            );
+        const envelope = Math.exp(-Math.abs(distance) / impact.width);
+        const ringX = Math.sin(2 * Math.PI * impact.freq_x * distance);
+        const ringY = Math.sin(2 * Math.PI * impact.freq_y * distance);
+        const ringZ = Math.sin(2 * Math.PI * impact.freq_z * distance);
 
-        const ringing =
-            Math.sin(
-                2 *
-                Math.PI *
-                30 *
-                distance
-            );
-
-        impactSignal +=
-            impact.amplitude *
-            envelope *
-            (
-                0.55 +
-                0.45 *
-                ringing
-            );
-
+        eventX += impact.amplitude * impact.wx * envelope * (0.55 + 0.45 * ringX);
+        eventY += impact.amplitude * impact.wy * envelope * (0.55 + 0.45 * ringY);
+        eventZ += impact.amplitude * impact.wz * envelope * (0.55 + 0.45 * ringZ);
     }
 
-    /*
-     * -------------------------------------------------------
-     * THREE AXES
-     * -------------------------------------------------------
-     */
-
-    const xValue =
-        background +
-        impactSignal;
-
-    const yValue =
-        background * 0.88 +
-        impactSignal * 0.75 +
-        (
-            Math.random() -
-            0.5
-        ) * 50;
-
-    const zValue =
-        background * 0.72 +
-        impactSignal * 0.58 +
-        (
-            Math.random() -
-            0.5
-        ) * 40;
-
-    /*
-     * -------------------------------------------------------
-     * ADC LIMIT
-     * -------------------------------------------------------
-     */
-
-    const xADC =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                xValue
-            )
-        );
-
-    const yADC =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                yValue
-            )
-        );
-
-    const zADC =
-        Math.max(
-            0,
-            Math.min(
-                5000,
-                zValue
-            )
-        );
+    const xADC = Math.round(Math.max(0, Math.min(5000, bgX + eventX)));
+    const yADC = Math.round(Math.max(0, Math.min(5000, bgY + eventY)));
+    const zADC = Math.round(Math.max(0, Math.min(5000, bgZ + eventZ)));
 
     /*
      * -------------------------------------------------------
@@ -2158,6 +2197,9 @@ function generateLiveSimulationSample() {
 }
 
 function stopLiveSimulationWaveform() {
+
+    ambientSampleTime =
+        simulationSampleIndex / WAVEFORM_RATE_HZ;
 
     simulationActive =
         false;
