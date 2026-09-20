@@ -9,6 +9,18 @@ const WAVEFORM_RATE_HZ = 200;
 
 const ADC_ALERT_THRESHOLD = 2500;
 
+const SIMULATION_ALARM_DURATION_MS = 10000;
+
+const SIMULATION_WAVEFORM_DURATION_SECONDS = 10;
+
+let simulationAlarmTimer = null;
+
+let simulationWaveformTimer = null;
+
+let simulationSirenInterval = null;
+
+let simulationAudioCtx = null;
+
 const ALERT_COOLDOWN_MS = 5000;
 
 let lastElephantAlertTime = 0;
@@ -394,64 +406,6 @@ function renderWaveform(timestamp = 0) {
         );
     }
 
-
-    /*
-     * THRESHOLD LINE (ADC_ALERT_THRESHOLD)
-     */
-
-    const thresholdY =
-        graphBottom -
-        (ADC_ALERT_THRESHOLD / 5000) *
-        graphHeight;
-
-    ctx.save();
-
-    ctx.setLineDash([6, 5]);
-
-    ctx.strokeStyle = "#FF4444";
-
-    ctx.lineWidth = 1.5;
-
-    ctx.beginPath();
-
-    ctx.moveTo(
-        graphLeft,
-        thresholdY
-    );
-
-    ctx.lineTo(
-        graphRight,
-        thresholdY
-    );
-
-    ctx.stroke();
-
-    ctx.setLineDash([]);
-
-
-    /*
-     * THRESHOLD LABEL
-     */
-
-    ctx.font =
-        "11px Inter, Arial, sans-serif";
-
-    ctx.fillStyle =
-        "#FF4444";
-
-    ctx.textAlign =
-        "left";
-
-    ctx.textBaseline =
-        "bottom";
-
-    ctx.fillText(
-        `Threshold (${ADC_ALERT_THRESHOLD})`,
-        graphLeft + 8,
-        thresholdY - 8
-    );
-
-    ctx.restore();
 
 
     /*
@@ -1245,6 +1199,7 @@ function showElephantDetectedAlert({
      */
 
     if (
+        trigger !== "Simulation Trigger" &&
         now -
         lastElephantAlertTime <
         ALERT_COOLDOWN_MS
@@ -1349,7 +1304,9 @@ function showElephantDetectedAlert({
      * ACTIVATE ALARM
      */
 
-    playAlertSound();
+    if (trigger !== "Simulation Trigger") {
+        playAlertSound();
+    }
 }
 
 function hideElephantDetectedAlert() {
@@ -1647,22 +1604,484 @@ function intensityToSpectrogramColor(val) {
     return `#FFFFFF`;
 }
 
+function generateSimulationWaveform(
+    nodeId = "NODE_01"
+) {
+
+    waveformNode = nodeId;
+    if (typeof selectWaveformNode === "function") {
+        selectWaveformNode(nodeId);
+    }
+
+    const history =
+        triaxialHistory[nodeId];
+
+    if (!history) {
+        return;
+    }
+
+
+    /*
+     * Clear the previous waveform so the
+     * simulated event is clearly visible.
+     */
+
+    history.x = [];
+    history.y = [];
+    history.z = [];
+    history.timestamps = [];
+
+
+    /*
+     * Generate exactly 10 seconds of data.
+     *
+     * 200 Hz × 10 seconds
+     * = 2000 samples
+     */
+
+    const sampleRate =
+        WAVEFORM_RATE_HZ;
+
+    const sampleCount =
+        sampleRate *
+        SIMULATION_WAVEFORM_DURATION_SECONDS;
+
+
+    /*
+     * Generate a realistic-looking
+     * low-amplitude ground vibration
+     * followed by an elephant-like
+     * high-amplitude vibration event.
+     */
+
+    const eventCenter =
+        sampleCount * 0.72;
+
+
+    const eventWidth =
+        sampleRate * 0.35;
+
+
+    const now =
+        Date.now() / 1000;
+
+    const startTime =
+        now -
+        SIMULATION_WAVEFORM_DURATION_SECONDS;
+
+
+    for (
+        let i = 0;
+        i < sampleCount;
+        i++
+    ) {
+
+        /*
+         * Small normal background vibration.
+         */
+
+        const background =
+            40 +
+            Math.sin(
+                i * 0.11
+            ) * 20 +
+            Math.sin(
+                i * 0.037
+            ) * 15;
+
+
+        /*
+         * Distance from event center.
+         */
+
+        const distance =
+            i -
+            eventCenter;
+
+
+        /*
+         * Gaussian-shaped event envelope.
+         */
+
+        const envelope =
+            Math.exp(
+                -(
+                    distance *
+                    distance
+                ) /
+                (
+                    2 *
+                    eventWidth *
+                    eventWidth
+                )
+            );
+
+
+        /*
+         * Elephant ground vibration
+         * waveform.
+         */
+
+        const vibration =
+            envelope *
+            (
+                2850 +
+                Math.sin(
+                    i * 0.42
+                ) * 350 +
+                Math.sin(
+                    i * 0.19
+                ) * 180
+            );
+
+
+        /*
+         * Small variations between axes.
+         */
+
+        const xValue =
+            Math.max(
+                0,
+                background +
+                vibration
+            );
+
+
+        const yValue =
+            Math.max(
+                0,
+                background +
+                vibration *
+                0.82
+            );
+
+
+        const zValue =
+            Math.max(
+                0,
+                background +
+                vibration *
+                0.65
+            );
+
+
+        history.x.push(
+            Math.min(
+                5000,
+                xValue
+            )
+        );
+
+        history.y.push(
+            Math.min(
+                5000,
+                yValue
+            )
+        );
+
+        history.z.push(
+            Math.min(
+                5000,
+                zValue
+            )
+        );
+
+        history.timestamps.push(
+            startTime +
+            (i / sampleRate)
+        );
+    }
+
+
+    /*
+     * Redraw immediately.
+     */
+
+    requestAnimationFrame(
+        () => renderWaveform()
+    );
+}
+
+function startSimulationAlarm() {
+
+    /*
+     * Stop any previous simulation alarm.
+     */
+
+    if (simulationAlarmTimer) {
+
+        clearTimeout(
+            simulationAlarmTimer
+        );
+
+        simulationAlarmTimer =
+            null;
+    }
+
+    if (simulationSirenInterval) {
+
+        clearInterval(
+            simulationSirenInterval
+        );
+
+        simulationSirenInterval =
+            null;
+    }
+
+    if (simulationAudioCtx) {
+
+        try {
+            simulationAudioCtx.close();
+        } catch (e) {}
+
+        simulationAudioCtx =
+            null;
+    }
+
+
+    /*
+     * Web Audio API.
+     */
+
+    const AudioContext =
+        window.AudioContext ||
+        window.webkitAudioContext;
+
+
+    if (!AudioContext) {
+        return;
+    }
+
+
+    const audioCtx =
+        new AudioContext();
+
+    simulationAudioCtx =
+        audioCtx;
+
+
+    if (
+        audioCtx.state ===
+        "suspended"
+    ) {
+
+        audioCtx.resume();
+    }
+
+
+    const oscillator =
+        audioCtx.createOscillator();
+
+
+    const gain =
+        audioCtx.createGain();
+
+
+    oscillator.type =
+        "sawtooth";
+
+
+    /*
+     * Start at high siren frequency.
+     */
+
+    oscillator.frequency.setValueAtTime(
+        900,
+        audioCtx.currentTime
+    );
+
+
+    /*
+     * Siren sweep.
+     */
+
+    oscillator.frequency.setValueAtTime(
+        900,
+        audioCtx.currentTime
+    );
+
+
+    oscillator.frequency.linearRampToValueAtTime(
+        500,
+        audioCtx.currentTime + 0.5
+    );
+
+
+    oscillator.frequency.linearRampToValueAtTime(
+        900,
+        audioCtx.currentTime + 1.0
+    );
+
+
+    oscillator.frequency.linearRampToValueAtTime(
+        500,
+        audioCtx.currentTime + 1.5
+    );
+
+
+    oscillator.frequency.linearRampToValueAtTime(
+        900,
+        audioCtx.currentTime + 2.0
+    );
+
+
+    /*
+     * Continue the siren pattern for
+     * the full 10 seconds.
+     */
+
+    let direction =
+        -1;
+
+
+    const sirenInterval =
+        setInterval(() => {
+
+            const currentTime =
+                audioCtx.currentTime;
+
+            const currentFrequency =
+                direction === -1
+                    ? 500
+                    : 900;
+
+            oscillator.frequency.linearRampToValueAtTime(
+                currentFrequency,
+                currentTime + 0.5
+            );
+
+            direction *= -1;
+
+        }, 500);
+
+    simulationSirenInterval =
+        sirenInterval;
+
+
+    /*
+     * Volume.
+     */
+
+    gain.gain.setValueAtTime(
+        0.0,
+        audioCtx.currentTime
+    );
+
+
+    gain.gain.linearRampToValueAtTime(
+        0.32,
+        audioCtx.currentTime + 0.08
+    );
+
+
+    oscillator.connect(
+        gain
+    );
+
+
+    gain.connect(
+        audioCtx.destination
+    );
+
+
+    oscillator.start();
+
+
+    /*
+     * STOP EVERYTHING AFTER 10 SECONDS.
+     */
+
+    simulationAlarmTimer =
+        setTimeout(() => {
+
+            clearInterval(
+                sirenInterval
+            );
+
+            simulationSirenInterval =
+                null;
+
+
+            gain.gain.linearRampToValueAtTime(
+                0.001,
+                audioCtx.currentTime + 0.15
+            );
+
+
+            oscillator.stop(
+                audioCtx.currentTime + 0.2
+            );
+
+
+            setTimeout(() => {
+
+                audioCtx.close();
+                if (simulationAudioCtx === audioCtx) {
+                    simulationAudioCtx = null;
+                }
+
+            }, 300);
+
+
+            simulationAlarmTimer =
+                null;
+
+        }, SIMULATION_ALARM_DURATION_MS);
+}
+
 async function triggerSimulation(
     type = "INBOUND_NW"
 ) {
 
     /*
-     * Immediately show local elephant
-     * detection when the simulation button
-     * is pressed.
+     * Determine which sensor should show
+     * the simulated event.
+     */
+
+    let simulationNode =
+        "NODE_02";
+
+
+    if (
+        type === "INBOUND_NE"
+    ) {
+
+        simulationNode =
+            "NODE_03";
+
+    } else if (
+        type === "OUTBOUND"
+    ) {
+
+        simulationNode =
+            "NODE_02";
+    }
+
+
+    /*
+     * ======================================================
+     * 1. GENERATE SIMULATED WAVEFORM
+     * ======================================================
+     *
+     * This happens immediately when the
+     * simulation button is clicked.
+     */
+
+    generateSimulationWaveform(
+        simulationNode
+    );
+
+
+    /*
+     * ======================================================
+     * 2. SHOW ELEPHANT DETECTED
+     * ======================================================
      */
 
     showElephantDetectedAlert({
 
         sensor:
-            type === "INBOUND_NE"
-                ? "G3"
-                : "G2",
+            simulationNode,
 
         trigger:
             "Simulation Trigger",
@@ -1671,6 +2090,21 @@ async function triggerSimulation(
             "Simulated elephant intrusion event detected."
     });
 
+
+    /*
+     * ======================================================
+     * 3. START 10-SECOND SIREN
+     * ======================================================
+     */
+
+    startSimulationAlarm();
+
+
+    /*
+     * ======================================================
+     * 4. KEEP EXISTING BACKEND SIMULATION
+     * ======================================================
+     */
 
     try {
 
@@ -1713,10 +2147,27 @@ async function clearSimulation() {
 
 
         /*
-         * Hide elephant detection banner.
+         * Hide elephant detection banner and stop simulation siren.
          */
 
         hideElephantDetectedAlert();
+
+        if (simulationAlarmTimer) {
+            clearTimeout(simulationAlarmTimer);
+            simulationAlarmTimer = null;
+        }
+
+        if (simulationSirenInterval) {
+            clearInterval(simulationSirenInterval);
+            simulationSirenInterval = null;
+        }
+
+        if (simulationAudioCtx) {
+            try {
+                simulationAudioCtx.close();
+            } catch (e) {}
+            simulationAudioCtx = null;
+        }
 
 
         /*
