@@ -9,13 +9,26 @@ const WAVEFORM_RATE_HZ = 200;
 
 const ADC_ALERT_THRESHOLD = 2500;
 
+const SIMULATION_DURATION_MS = 10000;
+
+const SIMULATION_SAMPLE_INTERVAL_MS =
+    1000 / WAVEFORM_RATE_HZ;
+
+let simulationActive = false;
+
+let simulationNodeId = null;
+
+let simulationStartTime = 0;
+
+let simulationSampleTimer = null;
+
+let simulationAnimationFrame = null;
+
+let simulationSampleIndex = 0;
+
 const SIMULATION_ALARM_DURATION_MS = 10000;
 
-const SIMULATION_WAVEFORM_DURATION_SECONDS = 10;
-
 let simulationAlarmTimer = null;
-
-let simulationWaveformTimer = null;
 
 let simulationSirenInterval = null;
 
@@ -167,6 +180,7 @@ function renderWaveform(timestamp = 0) {
     }
 
     if (
+        !simulationActive &&
         lastWaveformRenderTime !== 0 &&
         timestamp - lastWaveformRenderTime <
             WAVEFORM_UPDATE_INTERVAL_MS
@@ -1604,9 +1618,15 @@ function intensityToSpectrogramColor(val) {
     return `#FFFFFF`;
 }
 
-function generateSimulationWaveform(
+function startLiveSimulationWaveform(
     nodeId = "NODE_01"
 ) {
+
+    /*
+     * Stop previous simulation.
+     */
+
+    stopLiveSimulationWaveform();
 
     waveformNode = nodeId;
     if (typeof selectWaveformNode === "function") {
@@ -1616,190 +1636,480 @@ function generateSimulationWaveform(
     const history =
         triaxialHistory[nodeId];
 
+
     if (!history) {
         return;
     }
 
 
-    /*
-     * Clear the previous waveform so the
-     * simulated event is clearly visible.
-     */
+    simulationActive =
+        true;
 
-    history.x = [];
-    history.y = [];
-    history.z = [];
-    history.timestamps = [];
+    simulationNodeId =
+        nodeId;
 
+    simulationStartTime =
+        performance.now();
 
-    /*
-     * Generate exactly 10 seconds of data.
-     *
-     * 200 Hz × 10 seconds
-     * = 2000 samples
-     */
-
-    const sampleRate =
-        WAVEFORM_RATE_HZ;
-
-    const sampleCount =
-        sampleRate *
-        SIMULATION_WAVEFORM_DURATION_SECONDS;
+    simulationSampleIndex =
+        0;
 
 
     /*
-     * Generate a realistic-looking
-     * low-amplitude ground vibration
-     * followed by an elephant-like
-     * high-amplitude vibration event.
+     * Clear old simulation waveform.
      */
 
-    const eventCenter =
-        sampleCount * 0.72;
-
-
-    const eventWidth =
-        sampleRate * 0.35;
-
-
-    const now =
-        Date.now() / 1000;
-
-    const startTime =
-        now -
-        SIMULATION_WAVEFORM_DURATION_SECONDS;
-
-
-    for (
-        let i = 0;
-        i < sampleCount;
-        i++
-    ) {
-
-        /*
-         * Small normal background vibration.
-         */
-
-        const background =
-            40 +
-            Math.sin(
-                i * 0.11
-            ) * 20 +
-            Math.sin(
-                i * 0.037
-            ) * 15;
-
-
-        /*
-         * Distance from event center.
-         */
-
-        const distance =
-            i -
-            eventCenter;
-
-
-        /*
-         * Gaussian-shaped event envelope.
-         */
-
-        const envelope =
-            Math.exp(
-                -(
-                    distance *
-                    distance
-                ) /
-                (
-                    2 *
-                    eventWidth *
-                    eventWidth
-                )
-            );
-
-
-        /*
-         * Elephant ground vibration
-         * waveform.
-         */
-
-        const vibration =
-            envelope *
-            (
-                2850 +
-                Math.sin(
-                    i * 0.42
-                ) * 350 +
-                Math.sin(
-                    i * 0.19
-                ) * 180
-            );
-
-
-        /*
-         * Small variations between axes.
-         */
-
-        const xValue =
-            Math.max(
-                0,
-                background +
-                vibration
-            );
-
-
-        const yValue =
-            Math.max(
-                0,
-                background +
-                vibration *
-                0.82
-            );
-
-
-        const zValue =
-            Math.max(
-                0,
-                background +
-                vibration *
-                0.65
-            );
-
-
-        history.x.push(
-            Math.min(
-                5000,
-                xValue
-            )
-        );
-
-        history.y.push(
-            Math.min(
-                5000,
-                yValue
-            )
-        );
-
-        history.z.push(
-            Math.min(
-                5000,
-                zValue
-            )
-        );
-
-        history.timestamps.push(
-            startTime +
-            (i / sampleRate)
-        );
+    history.x.length = 0;
+    history.y.length = 0;
+    history.z.length = 0;
+    if (history.timestamps) {
+        history.timestamps.length = 0;
     }
 
 
     /*
-     * Redraw immediately.
+     * ======================================================
+     * PREFILL THE 10 SECOND WINDOW
+     * ======================================================
      */
 
-    requestAnimationFrame(
-        () => renderWaveform()
+    const maxSamples =
+        WAVEFORM_RATE_HZ *
+        WAVEFORM_DISPLAY_SECONDS;
+
+
+    for (
+        let i = 0;
+        i < maxSamples;
+        i++
+    ) {
+
+        history.x.push(
+            40
+        );
+
+        history.y.push(
+            35
+        );
+
+        history.z.push(
+            30
+        );
+
+        if (history.timestamps) {
+            history.timestamps.push(null);
+        }
+    }
+
+
+    /*
+     * ======================================================
+     * START SAMPLE GENERATION
+     * ======================================================
+     */
+
+    simulationSampleTimer =
+        setInterval(
+            generateLiveSimulationSample,
+            SIMULATION_SAMPLE_INTERVAL_MS
+        );
+
+
+    /*
+     * ======================================================
+     * START CONTINUOUS SCREEN ANIMATION
+     * ======================================================
+     *
+     * This is VERY IMPORTANT.
+     *
+     * The waveform is redrawn continuously,
+     * not only when a new sample arrives.
+     */
+
+    simulationAnimationFrame =
+        requestAnimationFrame(
+            animateSimulationWaveform
+        );
+}
+
+function animateSimulationWaveform() {
+
+    if (
+        !simulationActive
+    ) {
+        return;
+    }
+
+
+    /*
+     * Redraw the waveform every browser frame.
+     *
+     * Usually ~60 FPS.
+     */
+
+    renderWaveform();
+
+
+    /*
+     * Continue forever while simulation
+     * is active.
+     */
+
+    simulationAnimationFrame =
+        requestAnimationFrame(
+            animateSimulationWaveform
+        );
+}
+
+function generateLiveSimulationSample() {
+
+    if (
+        !simulationActive ||
+        !simulationNodeId
+    ) {
+        return;
+    }
+
+
+    const history =
+        triaxialHistory[
+            simulationNodeId
+        ];
+
+
+    if (!history) {
+        return;
+    }
+
+
+    const elapsed =
+        performance.now() -
+        simulationStartTime;
+
+
+    /*
+     * Stop after 10 seconds.
+     */
+
+    if (
+        elapsed >=
+        SIMULATION_DURATION_MS
+    ) {
+
+        stopLiveSimulationWaveform();
+
+        return;
+    }
+
+
+    const t =
+        simulationSampleIndex /
+        WAVEFORM_RATE_HZ;
+
+
+    simulationSampleIndex++;
+
+
+    /*
+     * ======================================================
+     * NORMAL CONTINUOUS GROUND VIBRATION
+     * ======================================================
+     */
+
+    const normalX =
+
+        45 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            3.5 *
+            t
+        ) * 18 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            7.0 *
+            t
+        ) * 10;
+
+
+    const normalY =
+
+        40 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            4.2 *
+            t
+        ) * 16 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            8.0 *
+            t
+        ) * 9;
+
+
+    const normalZ =
+
+        35 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            3.8 *
+            t
+        ) * 14 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            7.5 *
+            t
+        ) * 8;
+
+
+    /*
+     * ======================================================
+     * ELEPHANT EVENT
+     * ======================================================
+     *
+     * Strong continuous oscillations.
+     *
+     * NOT a Gaussian hump.
+     */
+
+    let elephantAmplitude =
+        0;
+
+
+    /*
+     * Elephant activity from 2s to 8s.
+     */
+
+    if (
+        t >= 2 &&
+        t < 8
+    ) {
+
+        elephantAmplitude =
+            1;
+
+    } else if (
+        t >= 1.5 &&
+        t < 2
+    ) {
+
+        /*
+         * Smoothly enter the vibration.
+         */
+
+        elephantAmplitude =
+            (
+                t - 1.5
+            ) / 0.5;
+
+    } else if (
+        t >= 8 &&
+        t < 8.5
+    ) {
+
+        /*
+         * Smoothly leave the vibration.
+         */
+
+        elephantAmplitude =
+            (
+                8.5 - t
+            ) / 0.5;
+    }
+
+
+    /*
+     * ======================================================
+     * CONTINUOUS VIBRATION
+     * ======================================================
+     */
+
+    const vibration =
+
+        Math.sin(
+            2 *
+            Math.PI *
+            5 *
+            t
+        ) * 900 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            8 *
+            t
+        ) * 550 +
+
+        Math.sin(
+            2 *
+            Math.PI *
+            12 *
+            t
+        ) * 300;
+
+
+    /*
+     * Add a positive ADC baseline.
+     */
+
+    const elephantSignal =
+        elephantAmplitude *
+        (
+            1700 +
+            vibration
+        );
+
+
+    /*
+     * ======================================================
+     * THREE AXES
+     * ======================================================
+     */
+
+    const xValue =
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                normalX +
+                elephantSignal
+            )
+        );
+
+
+    const yValue =
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                normalY +
+                elephantSignal *
+                0.80
+            )
+        );
+
+
+    const zValue =
+        Math.max(
+            0,
+            Math.min(
+                5000,
+                normalZ +
+                elephantSignal *
+                0.62
+            )
+        );
+
+
+    /*
+     * ======================================================
+     * APPEND ONLY ONE NEW SAMPLE
+     * ======================================================
+     */
+
+    history.x.push(
+        xValue
     );
+
+    history.y.push(
+        yValue
+    );
+
+    history.z.push(
+        zValue
+    );
+
+
+    /*
+     * ======================================================
+     * ROLLING 10 SECOND BUFFER
+     * ======================================================
+     */
+
+    const maxSamples =
+        WAVEFORM_RATE_HZ *
+        WAVEFORM_DISPLAY_SECONDS;
+
+
+    while (
+        history.x.length >
+        maxSamples
+    ) {
+
+        history.x.shift();
+    }
+
+
+    while (
+        history.y.length >
+        maxSamples
+    ) {
+
+        history.y.shift();
+    }
+
+
+    while (
+        history.z.length >
+        maxSamples
+    ) {
+
+        history.z.shift();
+    }
+
+    if (history.timestamps) {
+        history.timestamps.push(Date.now() / 1000);
+        while (history.timestamps.length > maxSamples) {
+            history.timestamps.shift();
+        }
+    }
+}
+
+function stopLiveSimulationWaveform() {
+
+    simulationActive =
+        false;
+
+
+    if (
+        simulationSampleTimer
+    ) {
+
+        clearInterval(
+            simulationSampleTimer
+        );
+
+        simulationSampleTimer =
+            null;
+    }
+
+
+    if (
+        simulationAnimationFrame
+    ) {
+
+        cancelAnimationFrame(
+            simulationAnimationFrame
+        );
+
+        simulationAnimationFrame =
+            null;
+    }
+
+
+    simulationNodeId =
+        null;
 }
 
 function startSimulationAlarm() {
@@ -2060,14 +2370,14 @@ async function triggerSimulation(
 
     /*
      * ======================================================
-     * 1. GENERATE SIMULATED WAVEFORM
+     * 1. START LIVE SIMULATION WAVEFORM
      * ======================================================
      *
      * This happens immediately when the
      * simulation button is clicked.
      */
 
-    generateSimulationWaveform(
+    startLiveSimulationWaveform(
         simulationNode
     );
 
@@ -2151,6 +2461,8 @@ async function clearSimulation() {
          */
 
         hideElephantDetectedAlert();
+
+        stopLiveSimulationWaveform();
 
         if (simulationAlarmTimer) {
             clearTimeout(simulationAlarmTimer);
