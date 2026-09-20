@@ -7,7 +7,7 @@ let stftCanvas, stftCtx;
 
 const WAVEFORM_RATE_HZ = 200;
 
-const ADC_ALERT_THRESHOLD = 2000;
+const ADC_ALERT_THRESHOLD = 2500;
 
 const ALERT_COOLDOWN_MS = 5000;
 
@@ -393,6 +393,65 @@ function renderWaveform(timestamp = 0) {
             y
         );
     }
+
+
+    /*
+     * THRESHOLD LINE (ADC_ALERT_THRESHOLD)
+     */
+
+    const thresholdY =
+        graphBottom -
+        (ADC_ALERT_THRESHOLD / 5000) *
+        graphHeight;
+
+    ctx.save();
+
+    ctx.setLineDash([6, 5]);
+
+    ctx.strokeStyle = "#FF4444";
+
+    ctx.lineWidth = 1.5;
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+        graphLeft,
+        thresholdY
+    );
+
+    ctx.lineTo(
+        graphRight,
+        thresholdY
+    );
+
+    ctx.stroke();
+
+    ctx.setLineDash([]);
+
+
+    /*
+     * THRESHOLD LABEL
+     */
+
+    ctx.font =
+        "11px Inter, Arial, sans-serif";
+
+    ctx.fillStyle =
+        "#FF4444";
+
+    ctx.textAlign =
+        "left";
+
+    ctx.textBaseline =
+        "bottom";
+
+    ctx.fillText(
+        `Threshold (${ADC_ALERT_THRESHOLD})`,
+        graphLeft + 8,
+        thresholdY - 8
+    );
+
+    ctx.restore();
 
 
     /*
@@ -872,7 +931,7 @@ function handleServerMessage(msg) {
 
 
         /*
-         * TRIGGER AT 2000 ADC
+         * TRIGGER AT ADC THRESHOLD
          */
 
         if (
@@ -885,14 +944,11 @@ function handleServerMessage(msg) {
                 sensor:
                     triggeringSensor,
 
-                maxAmplitude:
-                    waveformMax,
-
                 trigger:
-                    "Threshold Exceeded",
+                    "ADC Threshold Exceeded",
 
                 description:
-                    "Ground vibration exceeded 2000 ADC."
+                    `Ground vibration exceeded ${ADC_ALERT_THRESHOLD} ADC.`
             });
         }
 
@@ -1173,9 +1229,9 @@ function updateNodeUI(node) {
 
 function showElephantDetectedAlert({
     sensor = "G1",
-    maxAmplitude = 0,
     trigger = "ADC Threshold Exceeded",
-    description = "Ground vibration exceeded the detection threshold."
+    description =
+        "Ground vibration exceeded the detection threshold."
 } = {}) {
 
     const now =
@@ -1183,8 +1239,9 @@ function showElephantDetectedAlert({
 
 
     /*
-     * Prevent the same waveform spike from
-     * continuously retriggering the alarm.
+     * Prevent continuous waveform samples
+     * above the threshold from repeatedly
+     * triggering the alarm.
      */
 
     if (
@@ -1227,12 +1284,6 @@ function showElephantDetectedAlert({
         );
 
 
-    const amplitudeEl =
-        document.getElementById(
-            "elephantAlertAmplitude"
-        );
-
-
     const triggerEl =
         document.getElementById(
             "elephantAlertTrigger"
@@ -1249,10 +1300,6 @@ function showElephantDetectedAlert({
         return;
     }
 
-
-    /*
-     * SHOW ALERT
-     */
 
     alert.classList.remove(
         "hidden"
@@ -1281,15 +1328,6 @@ function showElephantDetectedAlert({
     }
 
 
-    if (amplitudeEl) {
-
-        amplitudeEl.textContent =
-            `${Math.round(
-                maxAmplitude
-            )} ADC`;
-    }
-
-
     if (triggerEl) {
 
         triggerEl.textContent =
@@ -1300,16 +1338,15 @@ function showElephantDetectedAlert({
     if (sensorEl) {
 
         sensorEl.textContent =
-            sensor
-                .replace(
-                    "NODE_",
-                    "G"
-                );
+            sensor.replace(
+                "NODE_",
+                "G"
+            );
     }
 
 
     /*
-     * PLAY ALARM
+     * ACTIVATE ALARM
      */
 
     playAlertSound();
@@ -1351,9 +1388,6 @@ function triggerAlertUI(alert) {
             alert.latest_node ||
             alert.nearest_node ||
             "NODE_01",
-
-        maxAmplitude:
-            ADC_ALERT_THRESHOLD,
 
         trigger:
             "TDOA / Fusion Detection",
@@ -1629,9 +1663,6 @@ async function triggerSimulation(
             type === "INBOUND_NE"
                 ? "G3"
                 : "G2",
-
-        maxAmplitude:
-            ADC_ALERT_THRESHOLD,
 
         trigger:
             "Simulation Trigger",
