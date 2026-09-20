@@ -248,7 +248,7 @@
         <section class="dashboard-main-section">
 
             <!-- =====================================================
-                 FULL WIDTH LIVE WAVEFORM
+                 TOP GRAPH — TRIAXIAL GEOPHONE WAVEFORM (ADC)
                  ===================================================== -->
 
             <div class="glass-card waveform-main-card">
@@ -256,7 +256,7 @@
                 <div class="card-header">
 
                     <div>
-                        <h2>Triaxial Geophone Waveform</h2>
+                        <h2>Triaxial Geophone Waveform — ADC</h2>
 
                         <span
                             style="
@@ -264,7 +264,7 @@
                                 color: var(--text-muted);
                             "
                         >
-                            Live triaxial ADC waveform stream
+                            LIVE • 200 Hz • 10 s Window
                         </span>
                     </div>
 
@@ -321,7 +321,7 @@
 
 
                 <!-- =================================================
-                     WAVEFORM
+                     ADC CANVAS
                      ================================================= -->
 
                 <div class="waveform-canvas-wrapper waveform-large">
@@ -334,8 +334,8 @@
 
 
             <!-- =====================================================
-                 ELEPHANT DETECTION ALERT
-                 THIS IS DIRECTLY BELOW THE WAVEFORM
+                 DETECTION ALERT
+                 PHYSICALLY BETWEEN THE TWO WAVEFORM GRAPHS
                  ===================================================== -->
 
             <div
@@ -358,8 +358,6 @@
                         >
                             ELEPHANT DETECTED!
                         </div>
-
-
 
                     </div>
 
@@ -393,13 +391,10 @@
 
                     </div>
 
-
-
-
                 </div>
 
 
-                <div class="elephant-alarm-indicator">
+                <div class="elephant-alarm-indicator" id="elephantAlarmIndicator">
 
                     <span class="alarm-wave">
                         ))))
@@ -408,14 +403,101 @@
                     <button
                         type="button"
                         class="alarm-button"
+                        id="elephantAlarmButton"
                         onclick="testAlarmSound()"
                     >
-                        🔊 ALARM ACTIVE
+                        🔊 SIREN ACTIVE
                     </button>
 
                     <span class="alarm-wave">
                         ((((
                     </span>
+
+                </div>
+
+            </div>
+
+
+            <!-- =====================================================
+                 BOTTOM GRAPH — TRIAXIAL GEOPHONE WAVEFORM (VOLTAGE)
+                 ===================================================== -->
+
+            <div class="glass-card waveform-main-card voltage-card">
+
+                <div class="card-header">
+
+                    <div>
+                        <h2>Triaxial Geophone Waveform — Voltage</h2>
+
+                        <span
+                            style="
+                                font-size: 0.78rem;
+                                color: var(--text-muted);
+                            "
+                        >
+                            LIVE • 200 Hz • 10 s Window
+                        </span>
+                    </div>
+
+
+                    <div class="waveform-controls">
+
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-x active"
+                            id="vAxisBtn_X"
+                            onclick="toggleAxisButton('X')"
+                        >
+                            <span class="axis-indicator"></span>
+                            X
+                        </button>
+
+
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-y active"
+                            id="vAxisBtn_Y"
+                            onclick="toggleAxisButton('Y')"
+                        >
+                            <span class="axis-indicator"></span>
+                            Y
+                        </button>
+
+
+                        <button
+                            type="button"
+                            class="wave-axis-btn axis-z active"
+                            id="vAxisBtn_Z"
+                            onclick="toggleAxisButton('Z')"
+                        >
+                            <span class="axis-indicator"></span>
+                            Z
+                        </button>
+
+
+                        <span class="waveform-divider"></span>
+
+
+                        <span class="waveform-live">
+
+                            <span class="live-dot"></span>
+
+                            LIVE
+
+                        </span>
+
+                    </div>
+
+                </div>
+
+
+                <!-- =================================================
+                     VOLTAGE CANVAS
+                     ================================================= -->
+
+                <div class="waveform-canvas-wrapper waveform-large">
+
+                    <canvas id="voltageCanvas"></canvas>
 
                 </div>
 
