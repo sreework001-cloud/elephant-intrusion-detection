@@ -2579,11 +2579,7 @@ function runFullDetectionDemo() {
         demoBtn.textContent = "🎬 Demo Running (120s)...";
     }
 
-    // Show and initialise the field clock bar
-    const clockBar = document.getElementById("demoFieldClockBar");
-    if (clockBar) clockBar.style.display = "block";
-    const clockEl = document.getElementById("demoFieldClock");
-    if (clockEl) clockEl.textContent = "10:17:46 AM";
+
 
 
     waveformDisplayMode = "demo";
@@ -2662,12 +2658,7 @@ function generateFullDemoSample() {
         return;
     }
 
-    /*
-     * ── FIELD CLOCK DISPLAY ──────────────────────────────────────────────
-     * formatDemoTime() is PURE ARITHMETIC — no Date(), no system clock.
-     */
-    const clockEl = document.getElementById("demoFieldClock");
-    if (clockEl) clockEl.textContent = formatDemoTime(demoElapsedSeconds);
+
 
     // DEBUG: log once per second to verify demo clock is correct
     if (Math.floor(demoElapsedSeconds) !== Math.floor(demoElapsedSeconds - (1 / WAVEFORM_RATE_HZ))) {
@@ -2808,11 +2799,7 @@ function stopFullDetectionDemo() {
         demoBtn.textContent = "🎬 Full Detection Demo";
     }
 
-    // Hide and reset the field clock bar
-    const clockBar = document.getElementById("demoFieldClockBar");
-    if (clockBar) clockBar.style.display = "none";
-    const clockEl = document.getElementById("demoFieldClock");
-    if (clockEl) clockEl.textContent = "10:17:46 AM";
+
 
     renderWaveform();
 }
