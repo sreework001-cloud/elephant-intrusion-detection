@@ -1728,12 +1728,7 @@ tr.clickable-row:hover {
    SPECIES SIMULATION CONTROLS & UTILITIES
    ========================================================= */
 
-.simulation-controls {
-    display: flex;
-    gap: 0.65rem;
-    align-items: center;
-    flex-wrap: wrap;
-}
+
 
 .simulation-btn {
     min-height: 42px;
@@ -2087,65 +2082,21 @@ tr.clickable-row:hover {
  * During screen recording they remain outside the frame.
  */
 
-.header-actions {
 
-    position: fixed;
-
-    top: -70px;
-
-    right: 18px;
-
-    z-index: 9999;
-
-    display: flex;
-
-    align-items: center;
-
-    gap: 0.6rem;
-
-    padding: 0.45rem 0.6rem;
-
-    border-radius: 0 0 12px 12px;
-
-    background:
-        rgba(5, 12, 20, 0.96);
-
-    border:
-        1px solid rgba(255,255,255,0.08);
-
-    box-shadow:
-        0 8px 24px rgba(0,0,0,0.35);
-
-    transition:
-        top 0.25s ease;
-
-}
 
 
 /*
  * Show the controls when the mouse reaches the top edge.
  */
 
-.header-actions:hover {
 
-    top: 8px;
-
-}
 
 
 /*
  * Keep the buttons compact.
  */
 
-.simulation-controls {
 
-    display: flex;
-
-    align-items: center;
-
-    gap: 0.45rem;
-
-}
 
 
 /*
@@ -2304,4 +2255,80 @@ tr.clickable-row:hover {
 
     }
 
+}
+
+/* ================================================================
+   HIDDEN CONTROL BAR
+   ================================================================ */
+
+.header-actions {
+    position: fixed;
+    top: -72px;
+    right: 18px;
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.45rem 0.6rem;
+    border-radius: 0 0 12px 12px;
+    background: rgba(5, 12, 20, 0.97);
+    border: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+    transition: top 0.25s ease;
+}
+
+/*
+ * IMPORTANT:
+ * This invisible area extends from the hidden control bar
+ * down to the very top edge of the screen.
+ */
+.header-actions::before {
+    content: "";
+    position: absolute;
+    left: -20px;
+    right: -20px;
+    top: 100%;
+    height: 72px;
+}
+
+.header-actions:hover {
+    top: 8px;
+}
+
+/* ================================================================
+   KEEP ALL SIMULATION BUTTONS AVAILABLE
+   ================================================================ */
+#fullDetectionDemoBtn,
+#simulateElephantBtn,
+#simulateHumanBtn,
+#simulateBovidBtn,
+#clearSimulationBtn {
+    display: inline-flex !important;
+}
+
+/* ================================================================
+   KEEP THE CONTROL BAR COMPACT
+   ================================================================ */
+.simulation-controls {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    white-space: nowrap;
+}
+
+/* ================================================================
+   SMALL SCREEN
+   ================================================================ */
+@media (max-width: 900px) {
+    .header-actions {
+        top: -90px;
+        right: 8px;
+        max-width: calc(100vw - 16px);
+        overflow-x: auto;
+    }
+    .header-actions::before {
+        left: -10px;
+        right: -10px;
+        height: 90px;
+    }
 }
