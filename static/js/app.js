@@ -481,10 +481,7 @@ let fullDemoSampleIndex = 0;
  *   Demo elapsed 120 s → 10:19:46 AM
  * ──────────────────────────────────────────────────────────────────────────
  */
-const DEMO_START_HOUR   = 10;
-const DEMO_START_MINUTE = 17;
-const DEMO_START_SECOND = 46;
-const DEMO_DURATION_SECONDS = 120;
+
 
 let demoStartPerformance = null;   // performance.now() captured at demo start
 let demoElapsedSeconds   = 0;      // master elapsed counter — updated each sample
@@ -856,12 +853,6 @@ function renderWaveform() {
     ctx.font = "11px Inter, Arial, sans-serif";
     ctx.textBaseline = "top";
     ctx.textAlign = "left";
-    ctx.fillStyle = "rgba(220,230,235,0.60)";
-    ctx.fillText(
-        `${waveformNode.replace("NODE_", "G")} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
-        graphLeft + 8,
-        graphTop + 5
-    );
 
     ctx.textAlign = "right";
     if (waveformDisplayMode === "idle") {
@@ -1033,12 +1024,6 @@ function renderVoltageWaveform() {
     voltageCtx.font = "11px Inter, Arial, sans-serif";
     voltageCtx.textBaseline = "top";
     voltageCtx.textAlign = "left";
-    voltageCtx.fillStyle = "rgba(220,230,235,0.60)";
-    voltageCtx.fillText(
-        `${waveformNode.replace("NODE_", "G")} • ${WAVEFORM_DISPLAY_SECONDS}s VIEW`,
-        graphLeft + 8,
-        graphTop + 5
-    );
 
     voltageCtx.textAlign = "right";
     if (waveformDisplayMode === "idle") {
@@ -1676,128 +1661,64 @@ function hideElephantDetectedAlert() {
 
 function showSpeciesDetectionAlert(type) {
 
-    const alert =
-        document.getElementById(
-            "elephantDetectionAlert"
-        );
+    const alert = document.getElementById("elephantDetectionAlert");
+    const title = document.getElementById("elephantAlertTitle");
+    const trigger = document.getElementById("elephantAlertTrigger");
+    const triggerLabel = document.getElementById("elephantAlertTriggerLabel");
+    const icon = alert ? alert.querySelector(".elephant-alert-icon") : null;
+    const alarmBtn = document.getElementById("elephantAlarmButton");
+    const alarmInd = document.getElementById("elephantAlarmIndicator");
 
-    const title =
-        document.getElementById(
-            "elephantAlertTitle"
-        );
+    if (!alert) return;
 
-    const description =
-        document.getElementById(
-            "elephantAlertDescription"
-        );
+    alert.classList.remove("hidden");
+    alert.classList.remove(
+        "status-normal",
+        "status-elephant",
+        "status-human",
+        "status-bovid"
+    );
 
-    const trigger =
-        document.getElementById(
-            "elephantAlertTrigger"
-        );
-
-    /*
-     * IMPORTANT:
-     * Do NOT show sensor name.
-     */
-
-    const sensor =
-        document.getElementById(
-            "elephantAlertSensor"
-        );
-
-    if (!alert) {
+    if (type === "normal") {
+        alert.classList.add("status-normal");
+        if (title) title.textContent = "NORMAL";
+        if (triggerLabel) triggerLabel.textContent = "STATUS";
+        if (trigger) trigger.textContent = "Normal Background";
+        if (icon) icon.textContent = "✓";
+        if (alarmInd) alarmInd.style.display = "none";
         return;
     }
 
-    alert.classList.remove(
-        "hidden"
-    );
-
     if (type === "elephant") {
-
-        if (title) {
-            title.textContent =
-                "ELEPHANT DETECTED!";
-        }
-
-        if (trigger) {
-            trigger.textContent =
-                "Elephant Detection";
-        }
-
+        alert.classList.add("status-elephant");
+        if (title) title.textContent = "DANGER: ELEPHANT DETECTED";
+        if (triggerLabel) triggerLabel.textContent = "TRIGGER";
+        if (trigger) trigger.textContent = "Elephant Detection";
+        if (icon) icon.textContent = "🚨";
+        if (alarmBtn) alarmBtn.textContent = "🔊 SIREN ACTIVE";
+        if (alarmInd) alarmInd.style.display = "flex";
+        return;
     }
 
-    else if (
-        type === "human"
-    ) {
-
-        if (title) {
-            title.textContent =
-                "HUMAN DETECTED!";
-        }
-
-        if (trigger) {
-            trigger.textContent =
-                "Human Detection";
-        }
-
+    if (type === "human") {
+        alert.classList.add("status-human");
+        if (title) title.textContent = "HUMAN INTRUSION";
+        if (triggerLabel) triggerLabel.textContent = "TRIGGER";
+        if (trigger) trigger.textContent = "Human Detection";
+        if (icon) icon.textContent = "⚠";
+        if (alarmInd) alarmInd.style.display = "none";
+        return;
     }
 
-    else if (
-        type === "bovid"
-    ) {
-
-        if (title) {
-            title.textContent =
-                "BOVID DETECTED!";
-        }
-
-        if (trigger) {
-            trigger.textContent =
-                "Bovid Detection";
-        }
-
+    if (type === "bovid") {
+        alert.classList.add("status-bovid");
+        if (title) title.textContent = "BOVID DETECTED";
+        if (triggerLabel) triggerLabel.textContent = "TRIGGER";
+        if (trigger) trigger.textContent = "Bovid Detection";
+        if (icon) icon.textContent = "🐃";
+        if (alarmInd) alarmInd.style.display = "none";
+        return;
     }
-
-    /*
-     * Siren button & status
-     */
-    const alarmBtn = document.getElementById("elephantAlarmButton");
-    const alarmInd = document.getElementById("elephantAlarmIndicator");
-    if (alarmBtn) {
-        alarmBtn.textContent = "🔊 SIREN ACTIVE";
-    }
-    if (alarmInd) {
-        alarmInd.style.display = (type === "elephant") ? "flex" : "none";
-    }
-
-    /*
-     * NO EXTRA DESCRIPTION
-     */
-
-    if (description) {
-        description.textContent =
-            "";
-        description.style.display =
-            "none";
-    }
-
-    /*
-     * REMOVE SENSOR NAME FROM ALERT.
-     */
-
-    if (sensor) {
-
-        sensor.textContent =
-            "";
-
-        if (sensor.parentElement) {
-            sensor.parentElement.style.display =
-                "none";
-        }
-    }
-
 }
 
 function testAlarmSound() {
@@ -2494,33 +2415,21 @@ function setSimulationButtonsDisabled(disabled) {
 function createFullDemoImpacts() {
     const impacts = [];
 
-    // 1. ELEPHANT APPROACH (10.0s -> 17.0s)
-    // Low-energy distant footsteps gradually approaching (peaks below 2500 ADC)
-    const approachImpacts = createElephantImpacts(10.0, 17.0, true);
+    const approachImpacts = createElephantImpacts(30.0, 37.0, true);
     impacts.push(...approachImpacts);
 
-    // 2. MAIN ELEPHANT EVENT (17.0s -> 41.0s)
-    // Field: 10:17:46–10:18:17 — elephant very close to geophone
-    // Heavy transient impacts crossing 2500 ADC, peaks 2750–4150 ADC, long ringing
-    const elephantMainImpacts = createElephantImpacts(17.4, 40.8, false);
+    const elephantMainImpacts = createElephantImpacts(37.4, 60.8, false);
     impacts.push(...elephantMainImpacts);
 
-    // 3. ELEPHANT TRANSITION / STANDING (41.0s -> 65.0s)
-    // Field: 10:18:15–10:19:07 — elephant standing near geophone, person also present
-    // Use approach-level elephant: moderate amplitude, irregular spacing
-    const elephantTransImpacts = createElephantImpacts(41.5, 64.0, true);
-    // Boost amplitude slightly above approach, still elephant character
+    const elephantTransImpacts = createElephantImpacts(61.5, 74.0, true);
     elephantTransImpacts.forEach(imp => {
         imp.amplitude = Math.min(imp.amplitude * 1.35, 3200);
     });
     impacts.push(...elephantTransImpacts);
 
-    // 4. HUMAN EVENT (65.0s -> 75.0s)
-    // Field: ~10:19:25 — camera/person walking very near geophone
-    // 9 distinct isolated footsteps across the 10-second window (strictly below 1700 ADC)
-    const humanTimes = [65.6, 66.5, 67.4, 68.5, 69.3, 70.4, 71.5, 72.7, 73.8];
+    const humanTimes = [75.6, 76.5, 77.4, 78.5, 79.3, 80.4, 81.5, 82.7, 83.8];
     humanTimes.forEach((t, idx) => {
-        const amp = 750 + Math.random() * 650; // 750–1400 ADC
+        const amp = 750 + Math.random() * 650;
         const c = getTriaxialCoupling(idx);
         const fBase = 38 + Math.random() * 10;
         impacts.push({
@@ -2537,9 +2446,7 @@ function createFullDemoImpacts() {
         });
     });
 
-    // 5. BOVID EVENT (90.0s -> 106.0s) — SIMULATED (not from field recording)
-    // Clustered quadruped hoof strikes, moderate ringing (1450–1900 ADC each)
-    const bovidImpacts = createBovidImpacts(90.5, 105.5);
+    const bovidImpacts = createBovidImpacts(100.5, 114.5);
     impacts.push(...bovidImpacts);
 
     return impacts;
@@ -2576,7 +2483,7 @@ function runFullDetectionDemo() {
     const demoBtn = document.getElementById("fullDetectionDemoBtn");
     if (demoBtn) {
         demoBtn.classList.add("active");
-        demoBtn.textContent = "🎬 Demo Running (120s)...";
+        demoBtn.textContent = "🎬 Demo Running...";
     }
 
 
@@ -2603,29 +2510,49 @@ function runFullDetectionDemo() {
     startWaveformAnimation();
 }
 
-function handleFullDemoPhaseTransition(previousPhase, currentPhase) {
+function handleFullDemoPhaseTransition(
+    previousPhase,
+    currentPhase
+) {
+
+    if (
+        currentPhase === "normal" ||
+        currentPhase === "normal_after_human" ||
+        currentPhase === "normal_after_bovid"
+    ) {
+        stopSimulationAlarm();
+        showSpeciesDetectionAlert("normal");
+        return;
+    }
 
     if (currentPhase === "elephant_approach") {
-        // Approach phase: show alert but no siren yet (optional, or show alert early)
+        stopSimulationAlarm();
         showSpeciesDetectionAlert("elephant");
-        // no siren for approach
-    } else if (currentPhase === "elephant") {
-        showSpeciesDetectionAlert("elephant");
-        startContinuousSiren();
-    } else if (currentPhase === "elephant_transition") {
-        // Continued elephant/transition — keep elephant alert and siren active
+        return;
+    }
+
+    if (currentPhase === "elephant") {
         showSpeciesDetectionAlert("elephant");
         startContinuousSiren();
-    } else if (currentPhase === "human") {
+        return;
+    }
+
+    if (currentPhase === "elephant_transition") {
+        showSpeciesDetectionAlert("elephant");
+        startContinuousSiren();
+        return;
+    }
+
+    if (currentPhase === "human") {
         stopSimulationAlarm();
         showSpeciesDetectionAlert("human");
-    } else if (currentPhase === "bovid") {
+        return;
+    }
+
+    if (currentPhase === "bovid") {
         stopSimulationAlarm();
         showSpeciesDetectionAlert("bovid");
-    } else {
-        // Normal periods: "normal", "normal_after_human", "normal_after_bovid"
-        stopSimulationAlarm();
-        hideElephantDetectedAlert();
+        return;
     }
 }
 
@@ -2660,13 +2587,10 @@ function generateFullDemoSample() {
 
 
 
-    // DEBUG: log once per second to verify demo clock is correct
-    if (Math.floor(demoElapsedSeconds) !== Math.floor(demoElapsedSeconds - (1 / WAVEFORM_RATE_HZ))) {
-        console.log(
-            "DEMO TIME:", formatDemoTime(demoElapsedSeconds),
-            "  ELAPSED:", demoElapsedSeconds.toFixed(1) + "s"
-        );
-    }
+    /*
+     * No field-recording clock is displayed.
+     * Demo timing is handled internally only.
+     */
 
     /*
      * ── 120-SECOND PHASE TIMELINE ────────────────────────────────────────
@@ -2682,19 +2606,20 @@ function generateFullDemoSample() {
      *106–120 s  NORMAL                     → 10:19:32–10:19:46 AM
      */
     let currentPhase;
-    if (demoElapsedSeconds < 10.0) {
+
+    if (demoElapsedSeconds < 30.0) {
         currentPhase = "normal";
-    } else if (demoElapsedSeconds < 17.0) {
+    } else if (demoElapsedSeconds < 37.0) {
         currentPhase = "elephant_approach";
-    } else if (demoElapsedSeconds < 41.0) {
+    } else if (demoElapsedSeconds < 61.0) {
         currentPhase = "elephant";
-    } else if (demoElapsedSeconds < 65.0) {
-        currentPhase = "elephant_transition";
     } else if (demoElapsedSeconds < 75.0) {
+        currentPhase = "elephant_transition";
+    } else if (demoElapsedSeconds < 85.0) {
         currentPhase = "human";
-    } else if (demoElapsedSeconds < 90.0) {
+    } else if (demoElapsedSeconds < 100.0) {
         currentPhase = "normal_after_human";
-    } else if (demoElapsedSeconds < 106.0) {
+    } else if (demoElapsedSeconds < 115.0) {
         currentPhase = "bovid";
     } else {
         currentPhase = "normal_after_bovid";
@@ -2748,12 +2673,7 @@ function generateFullDemoSample() {
      * NOT to Date.now() or any system clock.
      */
     if (history.timestamps) {
-        // field recording base in seconds since Unix epoch — pure arithmetic
-        const demoBaseSec =
-            DEMO_START_HOUR   * 3600 +
-            DEMO_START_MINUTE * 60   +
-            DEMO_START_SECOND;
-        history.timestamps.push(demoBaseSec + demoElapsedSeconds);
+        history.timestamps.push(demoElapsedSeconds);
     }
 
 

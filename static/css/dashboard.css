@@ -1816,3 +1816,173 @@ tr.clickable-row:hover {
     display: none !important;
 }
 
+
+
+/* ================================================================
+   FINAL PRESENTATION DASHBOARD CLEANUP
+   ================================================================ */
+
+/*
+ * ------------------------------------------------
+ * REMOVE UNNECESSARY DASHBOARD SECTIONS
+ * ------------------------------------------------
+ *
+ * Keep:
+ *   - Header
+ *   - ADC waveform
+ *   - Detection status
+ *   - Voltage waveform
+ *
+ * Hide:
+ *   - Gateway / architecture bar
+ *   - Sensor node cards
+ *   - TDOA map
+ *   - Fusion log
+ */
+.arch-status-bar,
+.grid-nodes,
+.lower-dashboard-grid {
+    display: none !important;
+}
+
+/*
+ * ------------------------------------------------
+ * REMOVE INDIVIDUAL SPECIES BUTTONS
+ * ------------------------------------------------
+ *
+ * Full Detection Demo remains available.
+ */
+#simulateElephantBtn,
+#simulateHumanBtn,
+#simulateBovidBtn,
+#clearSimulationBtn {
+    display: none !important;
+}
+
+/*
+ * ------------------------------------------------
+ * NORMAL STATUS
+ * ------------------------------------------------
+ */
+.elephant-alert.status-normal {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(5, 150, 105, 0.35),
+            rgba(2, 44, 34, 0.75)
+        );
+    border-color: #10B981;
+    box-shadow: 0 0 25px rgba(16, 185, 129, 0.30);
+    animation: none;
+}
+
+.elephant-alert.status-normal .elephant-alert-icon {
+    background: rgba(16, 185, 129, 0.18);
+    color: #10B981;
+    box-shadow: 0 0 20px rgba(16, 185, 129, 0.35);
+}
+
+.elephant-alert.status-normal .alert-trigger-text {
+    color: #10B981 !important;
+}
+
+/*
+ * ------------------------------------------------
+ * ELEPHANT STATUS
+ * ------------------------------------------------
+ */
+.elephant-alert.status-elephant {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(127, 29, 29, 0.55),
+            rgba(69, 10, 10, 0.72)
+        );
+    border-color: var(--color-crimson);
+    box-shadow: 0 0 25px rgba(239, 68, 68, 0.35);
+    animation: elephant-alert-flash 1.2s infinite alternate;
+}
+
+.elephant-alert.status-elephant .alert-trigger-text {
+    color: #FF7777 !important;
+}
+
+/*
+ * ------------------------------------------------
+ * HUMAN STATUS
+ * ------------------------------------------------
+ */
+.elephant-alert.status-human {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(180, 83, 9, 0.35),
+            rgba(120, 53, 15, 0.70)
+        );
+    border-color: #F59E0B;
+    box-shadow: 0 0 25px rgba(245, 158, 11, 0.30);
+    animation: none;
+}
+
+.elephant-alert.status-human .elephant-alert-icon {
+    background: rgba(245, 158, 11, 0.18);
+    color: #FBBF24;
+    box-shadow: 0 0 20px rgba(245, 158, 11, 0.35);
+}
+
+.elephant-alert.status-human .alert-trigger-text {
+    color: #FBBF24 !important;
+}
+
+/*
+ * ------------------------------------------------
+ * BOVID STATUS
+ * ------------------------------------------------
+ */
+.elephant-alert.status-bovid {
+    background:
+        linear-gradient(
+            135deg,
+            rgba(88, 28, 135, 0.35),
+            rgba(59, 7, 100, 0.70)
+        );
+    border-color: #A855F7;
+    box-shadow: 0 0 25px rgba(168, 85, 247, 0.30);
+    animation: none;
+}
+
+.elephant-alert.status-bovid .alert-trigger-text {
+    color: #C084FC !important;
+}
+
+/*
+ * ------------------------------------------------
+ * EXACT 2 CM BLANK SPACE AFTER VOLTAGE GRAPH
+ * ------------------------------------------------
+ */
+.voltage-card {
+    margin-bottom: 2cm !important;
+}
+
+/*
+ * ------------------------------------------------
+ * MAKE SURE NO OLD NODE LABEL CAN APPEAR
+ * ------------------------------------------------
+ */
+.visually-hidden-node-label {
+    display: none !important;
+}
+
+/*
+ * ------------------------------------------------
+ * REMOVE ANY EXTRA LOWER CONTENT IF IT BECOMES
+ * VISIBLE THROUGH RESPONSIVE OVERRIDES
+ * ------------------------------------------------
+ */
+@media (max-width: 1100px) {
+    .arch-status-bar,
+    .grid-nodes,
+    .lower-dashboard-grid {
+        display: none !important;
+    }
+}

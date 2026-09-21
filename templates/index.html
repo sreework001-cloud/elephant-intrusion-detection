@@ -3,11 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Elephant Intrusion Early Warning System - Field Monitoring Dashboard</title>
-    <link rel="stylesheet" href="/static/css/dashboard.css">
+    <title>Elephant Intrusion Detection</title>
+    <!-- Font Awesome -->
+    <link
+        rel="stylesheet"
+        href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"
+    />
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="/static/css/dashboard.css" />
 </head>
-<body>
 
+<body>
     <!-- Main Container -->
     <div class="container">
         
@@ -16,8 +22,7 @@
             <div class="header-brand">
                 <div class="brand-icon">🐘</div>
                 <div class="brand-text">
-                    <h1>Elephant Intrusion Early Warning System</h1>
-                    <p>Multimodal IoT Network – Triangular Geophone Monitoring</p>
+                    <h1>ELEPHANT INTRUSION DETECTION</h1>
                 </div>
             </div>
 
@@ -259,7 +264,7 @@
                 <div class="card-header">
 
                     <div>
-                        <h2>Triaxial Geophone Waveform — ADC</h2>
+                        <h2>Triaxial Waveform &mdash; ADC</h2>
 
                         <span
                             style="
@@ -371,7 +376,7 @@
 
                     <div>
 
-                        <span>Trigger</span>
+                        <span id="elephantAlertTriggerLabel">TRIGGER</span>
 
                         <strong
                             id="elephantAlertTrigger"
@@ -421,7 +426,7 @@
                 <div class="card-header">
 
                     <div>
-                        <h2>Triaxial Geophone Waveform — Voltage</h2>
+                        <h2>Triaxial Waveform &mdash; Voltage</h2>
 
                         <span
                             style="
