@@ -469,6 +469,57 @@ let fullDemoSampleTimer = null;
 let fullDemoImpacts = [];
 let fullDemoSampleIndex = 0;
 
+/*
+ * ──────────────────────────────────────────────────────────────────────────
+ * DEMO CLOCK — FIELD RECORDING TIMESTAMP (PURE ARITHMETIC — NO Date OBJECTS)
+ *
+ * These constants define the start of the recorded video/field window.
+ * The clock NEVER reads the laptop/browser system clock.
+ *
+ *   Demo elapsed   0 s → 10:17:46 AM
+ *   Demo elapsed  60 s → 10:18:46 AM
+ *   Demo elapsed 120 s → 10:19:46 AM
+ * ──────────────────────────────────────────────────────────────────────────
+ */
+const DEMO_START_HOUR   = 10;
+const DEMO_START_MINUTE = 17;
+const DEMO_START_SECOND = 46;
+const DEMO_DURATION_SECONDS = 120;
+
+let demoStartPerformance = null;   // performance.now() captured at demo start
+let demoElapsedSeconds   = 0;      // master elapsed counter — updated each sample
+let demoRunning          = false;  // true only while Full Detection Demo is active
+
+/**
+ * formatDemoTime(elapsedSeconds)
+ *
+ * Converts demo elapsed time into a displayable field-recording time string.
+ * Uses ONLY integer arithmetic. No Date(), no getHours(), no system clock.
+ *
+ * @param {number} elapsedSeconds  0..120
+ * @returns {string}  e.g. "10:17:46 AM"
+ */
+function formatDemoTime(elapsedSeconds) {
+    const totalSeconds =
+        DEMO_START_HOUR   * 3600 +
+        DEMO_START_MINUTE * 60   +
+        DEMO_START_SECOND +
+        Math.floor(Math.min(elapsedSeconds, DEMO_DURATION_SECONDS));
+
+    const hours24 = Math.floor(totalSeconds / 3600) % 24;
+    const minutes = Math.floor((totalSeconds % 3600) / 60);
+    const seconds = totalSeconds % 60;
+
+    const hours12 = hours24 % 12 || 12;
+    const ampm    = hours24 < 12 ? "AM" : "PM";
+
+    return (
+        String(hours12).padStart(2, "0") + ":" +
+        String(minutes).padStart(2, "0") + ":" +
+        String(seconds).padStart(2, "0") + " " + ampm
+    );
+}
+
 const ALERT_COOLDOWN_MS = 5000;
 let lastElephantAlertTime = 0;
 let elephantAlertActive = false;
@@ -1488,28 +1539,22 @@ function showElephantDetectedAlert({
     description = ""
 } = {}) {
 
-    const now =
-        Date.now();
-
+    // Use performance.now() for cooldown — NOT Date.now() (never mix wall clock into demo logic)
+    const now = performance.now();
 
     /*
-     * Prevent continuous waveform samples
-     * above the threshold from repeatedly
-     * triggering the alarm.
+     * Cooldown: prevent continuous ADC threshold breaches from spamming the alert.
+     * BYPASS during Full Detection Demo — demo phase transitions handle timing.
      */
-
     if (
+        !demoRunning &&
         trigger !== "Elephant Detection" &&
-        now -
-        lastElephantAlertTime <
-        ALERT_COOLDOWN_MS
+        now - lastElephantAlertTime < ALERT_COOLDOWN_MS
     ) {
         return;
     }
 
-
-    lastElephantAlertTime =
-        now;
+    lastElephantAlertTime = now;
 
     elephantAlertActive =
         true;
@@ -1530,12 +1575,6 @@ function showElephantDetectedAlert({
     const desc =
         document.getElementById(
             "elephantAlertDescription"
-        );
-
-
-    const timeEl =
-        document.getElementById(
-            "elephantAlertTime"
         );
 
 
@@ -1574,14 +1613,6 @@ function showElephantDetectedAlert({
             "";
         desc.style.display =
             "none";
-    }
-
-
-    if (timeEl) {
-
-        timeEl.textContent =
-            new Date()
-                .toLocaleTimeString();
     }
 
 
@@ -1767,17 +1798,6 @@ function showSpeciesDetectionAlert(type) {
         }
     }
 
-    const time =
-        document.getElementById(
-            "elephantAlertTime"
-        );
-
-    if (time) {
-
-        time.textContent =
-            new Date()
-                .toLocaleTimeString();
-    }
 }
 
 function testAlarmSound() {
@@ -2474,21 +2494,33 @@ function setSimulationButtonsDisabled(disabled) {
 function createFullDemoImpacts() {
     const impacts = [];
 
-    // 1. ELEPHANT APPROACH (20.0s -> 27.0s)
-    // Low-energy distant footsteps gradually approaching (peaks stay strictly below 2500 ADC)
-    const approachImpacts = createElephantImpacts(20.0, 27.0, true);
+    // 1. ELEPHANT APPROACH (10.0s -> 17.0s)
+    // Low-energy distant footsteps gradually approaching (peaks below 2500 ADC)
+    const approachImpacts = createElephantImpacts(10.0, 17.0, true);
     impacts.push(...approachImpacts);
 
-    // 2. MAIN ELEPHANT EVENT (27.0s -> 58.0s)
-    // Heavy transient impacts crossing 2500 ADC, peaks 2750 - 4150 ADC, long ringing tail & heave
-    const elephantImpacts = createElephantImpacts(27.4, 57.6, false);
-    impacts.push(...elephantImpacts);
+    // 2. MAIN ELEPHANT EVENT (17.0s -> 41.0s)
+    // Field: 10:17:46–10:18:17 — elephant very close to geophone
+    // Heavy transient impacts crossing 2500 ADC, peaks 2750–4150 ADC, long ringing
+    const elephantMainImpacts = createElephantImpacts(17.4, 40.8, false);
+    impacts.push(...elephantMainImpacts);
 
-    // 3. HUMAN EVENT (66.0s -> 74.0s)
-    // 7 distinct isolated footsteps across the 8-second window (strictly below 1700 ADC)
-    const humanTimes = [66.7, 67.6, 68.8, 69.5, 70.7, 71.8, 72.9];
+    // 3. ELEPHANT TRANSITION / STANDING (41.0s -> 65.0s)
+    // Field: 10:18:15–10:19:07 — elephant standing near geophone, person also present
+    // Use approach-level elephant: moderate amplitude, irregular spacing
+    const elephantTransImpacts = createElephantImpacts(41.5, 64.0, true);
+    // Boost amplitude slightly above approach, still elephant character
+    elephantTransImpacts.forEach(imp => {
+        imp.amplitude = Math.min(imp.amplitude * 1.35, 3200);
+    });
+    impacts.push(...elephantTransImpacts);
+
+    // 4. HUMAN EVENT (65.0s -> 75.0s)
+    // Field: ~10:19:25 — camera/person walking very near geophone
+    // 9 distinct isolated footsteps across the 10-second window (strictly below 1700 ADC)
+    const humanTimes = [65.6, 66.5, 67.4, 68.5, 69.3, 70.4, 71.5, 72.7, 73.8];
     humanTimes.forEach((t, idx) => {
-        const amp = 750 + Math.random() * 650; // 750 - 1400 ADC
+        const amp = 750 + Math.random() * 650; // 750–1400 ADC
         const c = getTriaxialCoupling(idx);
         const fBase = 38 + Math.random() * 10;
         impacts.push({
@@ -2505,9 +2537,9 @@ function createFullDemoImpacts() {
         });
     });
 
-    // 4. BOVID EVENT (81.0s -> 97.0s)
-    // Clustered quadruped hoof strikes (1720 - 2380 ADC) with moderate ringing
-    const bovidImpacts = createBovidImpacts(81.5, 96.6);
+    // 5. BOVID EVENT (90.0s -> 106.0s) — SIMULATED (not from field recording)
+    // Clustered quadruped hoof strikes, moderate ringing (1450–1900 ADC each)
+    const bovidImpacts = createBovidImpacts(90.5, 105.5);
     impacts.push(...bovidImpacts);
 
     return impacts;
@@ -2547,11 +2579,26 @@ function runFullDetectionDemo() {
         demoBtn.textContent = "🎬 Demo Running (120s)...";
     }
 
+    // Show and initialise the field clock bar
+    const clockBar = document.getElementById("demoFieldClockBar");
+    if (clockBar) clockBar.style.display = "block";
+    const clockEl = document.getElementById("demoFieldClock");
+    if (clockEl) clockEl.textContent = "10:17:46 AM";
+
+
     waveformDisplayMode = "demo";
     fullDemoActive = true;
     simulationActive = true;
     simulationNodeId = nodeId;
-    fullDemoStartTime = performance.now();
+
+    // Capture one authoritative performance.now() — single source of truth
+    // for both the sample generator and the master demo clock.
+    const now = performance.now();
+    fullDemoStartTime    = now;
+    demoStartPerformance = now;
+    demoElapsedSeconds   = 0;
+    demoRunning          = true;
+
     fullDemoPreviousPhase = null;
     fullDemoSampleIndex = 0;
     fullDemoImpacts = createFullDemoImpacts();
@@ -2562,7 +2609,15 @@ function runFullDetectionDemo() {
 
 function handleFullDemoPhaseTransition(previousPhase, currentPhase) {
 
-    if (currentPhase === "elephant") {
+    if (currentPhase === "elephant_approach") {
+        // Approach phase: show alert but no siren yet (optional, or show alert early)
+        showSpeciesDetectionAlert("elephant");
+        // no siren for approach
+    } else if (currentPhase === "elephant") {
+        showSpeciesDetectionAlert("elephant");
+        startContinuousSiren();
+    } else if (currentPhase === "elephant_transition") {
+        // Continued elephant/transition — keep elephant alert and siren active
         showSpeciesDetectionAlert("elephant");
         startContinuousSiren();
     } else if (currentPhase === "human") {
@@ -2572,7 +2627,7 @@ function handleFullDemoPhaseTransition(previousPhase, currentPhase) {
         stopSimulationAlarm();
         showSpeciesDetectionAlert("bovid");
     } else {
-        // Normal periods: "normal", "elephant_approach", "normal_after_elephant", "normal_after_human", "normal_after_bovid"
+        // Normal periods: "normal", "normal_after_human", "normal_after_bovid"
         stopSimulationAlarm();
         hideElephantDetectedAlert();
     }
@@ -2589,44 +2644,85 @@ function generateFullDemoSample() {
         return;
     }
 
-    const elapsedMs = performance.now() - fullDemoStartTime;
-    const elapsedSeconds = elapsedMs / 1000;
+    /*
+     * MASTER DEMO CLOCK
+     * demoElapsedSeconds is the single source of truth for:
+     *   — phase determination
+     *   — field clock display
+     *   — waveform impact lookup
+     * It is clamped to [0, 120] and NEVER derived from laptop time.
+     */
+    demoElapsedSeconds = Math.min(
+        (performance.now() - demoStartPerformance) / 1000,
+        120.0
+    );
 
-    if (elapsedSeconds >= 120.0) {
+    if (demoElapsedSeconds >= 120.0) {
         stopFullDetectionDemo();
         return;
     }
 
     /*
-     * 120-SECOND TIMELINE PHASE DETERMINATION
+     * ── FIELD CLOCK DISPLAY ──────────────────────────────────────────────
+     * formatDemoTime() is PURE ARITHMETIC — no Date(), no system clock.
+     */
+    const clockEl = document.getElementById("demoFieldClock");
+    if (clockEl) clockEl.textContent = formatDemoTime(demoElapsedSeconds);
+
+    // DEBUG: log once per second to verify demo clock is correct
+    if (Math.floor(demoElapsedSeconds) !== Math.floor(demoElapsedSeconds - (1 / WAVEFORM_RATE_HZ))) {
+        console.log(
+            "DEMO TIME:", formatDemoTime(demoElapsedSeconds),
+            "  ELAPSED:", demoElapsedSeconds.toFixed(1) + "s"
+        );
+    }
+
+    /*
+     * ── 120-SECOND PHASE TIMELINE ────────────────────────────────────────
+     * Field recording window: 10:17:46 AM → 10:19:46 AM
+     *
+     *  0–10 s   NORMAL BACKGROUND          → 10:17:46–10:17:56 AM
+     * 10–17 s   ELEPHANT APPROACH          → 10:17:56–10:18:03 AM
+     * 17–41 s   ELEPHANT MAIN              → 10:18:03–10:18:27 AM
+     * 41–65 s   ELEPHANT TRANSITION        → 10:18:27–10:18:51 AM
+     * 65–75 s   HUMAN                      → 10:18:51–10:19:01 AM
+     * 75–90 s   NORMAL                     → 10:19:01–10:19:16 AM
+     * 90–106 s  BOVID (SIMULATED)          → 10:19:16–10:19:32 AM
+     *106–120 s  NORMAL                     → 10:19:32–10:19:46 AM
      */
     let currentPhase;
-    if (elapsedSeconds < 20.0) {
+    if (demoElapsedSeconds < 10.0) {
         currentPhase = "normal";
-    } else if (elapsedSeconds < 27.0) {
+    } else if (demoElapsedSeconds < 17.0) {
         currentPhase = "elephant_approach";
-    } else if (elapsedSeconds < 58.0) {
+    } else if (demoElapsedSeconds < 41.0) {
         currentPhase = "elephant";
-    } else if (elapsedSeconds < 66.0) {
-        currentPhase = "normal_after_elephant";
-    } else if (elapsedSeconds < 74.0) {
+    } else if (demoElapsedSeconds < 65.0) {
+        currentPhase = "elephant_transition";
+    } else if (demoElapsedSeconds < 75.0) {
         currentPhase = "human";
-    } else if (elapsedSeconds < 81.0) {
+    } else if (demoElapsedSeconds < 90.0) {
         currentPhase = "normal_after_human";
-    } else if (elapsedSeconds < 97.0) {
+    } else if (demoElapsedSeconds < 106.0) {
         currentPhase = "bovid";
     } else {
         currentPhase = "normal_after_bovid";
     }
 
     /*
-     * Trigger alert and siren updates ONLY on phase transition
+     * Trigger alert/siren changes ONLY on phase transition edges.
      */
     if (currentPhase !== fullDemoPreviousPhase) {
         handleFullDemoPhaseTransition(fullDemoPreviousPhase, currentPhase);
         fullDemoPreviousPhase = currentPhase;
     }
 
+    /*
+     * ── WAVEFORM SAMPLE GENERATION ──────────────────────────────────────
+     * t = sample index / sample rate → continuous time in seconds.
+     * This is independent of wall-clock time so the waveform shape
+     * is not affected by browser jitter.
+     */
     const t = fullDemoSampleIndex / WAVEFORM_RATE_HZ;
     fullDemoSampleIndex++;
 
@@ -2656,39 +2752,45 @@ function generateFullDemoSample() {
     if (history.vy) history.vy.push(adcToVoltage(yADC, "y"));
     if (history.vz) history.vz.push(adcToVoltage(zADC, "z"));
 
-    const maxSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
-    while (history.x.length > maxSamples) {
-        history.x.shift();
-    }
-    while (history.y.length > maxSamples) {
-        history.y.shift();
-    }
-    while (history.z.length > maxSamples) {
-        history.z.shift();
-    }
-    while (history.vx && history.vx.length > maxSamples) {
-        history.vx.shift();
-    }
-    while (history.vy && history.vy.length > maxSamples) {
-        history.vy.shift();
-    }
-    while (history.vz && history.vz.length > maxSamples) {
-        history.vz.shift();
-    }
+    /*
+     * Store timestamps anchored to the field recording clock (pure arithmetic),
+     * NOT to Date.now() or any system clock.
+     */
     if (history.timestamps) {
-        history.timestamps.push(Date.now() / 1000);
-        while (history.timestamps.length > maxSamples) {
-            history.timestamps.shift();
-        }
+        // field recording base in seconds since Unix epoch — pure arithmetic
+        const demoBaseSec =
+            DEMO_START_HOUR   * 3600 +
+            DEMO_START_MINUTE * 60   +
+            DEMO_START_SECOND;
+        history.timestamps.push(demoBaseSec + demoElapsedSeconds);
+    }
+
+
+    const maxSamples = WAVEFORM_RATE_HZ * WAVEFORM_DISPLAY_SECONDS;
+    while (history.x.length > maxSamples) history.x.shift();
+    while (history.y.length > maxSamples) history.y.shift();
+    while (history.z.length > maxSamples) history.z.shift();
+    while (history.vx && history.vx.length > maxSamples) history.vx.shift();
+    while (history.vy && history.vy.length > maxSamples) history.vy.shift();
+    while (history.vz && history.vz.length > maxSamples) history.vz.shift();
+    if (history.timestamps) {
+        while (history.timestamps.length > maxSamples) history.timestamps.shift();
     }
 }
 
+
+
 function stopFullDetectionDemo() {
 
-    waveformDisplayMode = "idle";
-    fullDemoActive = false;
-    simulationActive = false;
-    simulationNodeId = null;
+    waveformDisplayMode  = "idle";
+    fullDemoActive       = false;
+    simulationActive     = false;
+    simulationNodeId     = null;
+    demoRunning          = false;
+    demoStartPerformance = null;
+    // demoElapsedSeconds intentionally kept at final value (120) so the field
+    // clock stays frozen at 10:19:46 AM until next demo run or page refresh.
+
 
     if (fullDemoSampleTimer) {
         clearInterval(fullDemoSampleTimer);
@@ -2705,6 +2807,12 @@ function stopFullDetectionDemo() {
         demoBtn.classList.remove("active");
         demoBtn.textContent = "🎬 Full Detection Demo";
     }
+
+    // Hide and reset the field clock bar
+    const clockBar = document.getElementById("demoFieldClockBar");
+    if (clockBar) clockBar.style.display = "none";
+    const clockEl = document.getElementById("demoFieldClock");
+    if (clockEl) clockEl.textContent = "10:17:46 AM";
 
     renderWaveform();
 }
